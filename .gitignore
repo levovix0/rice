@@ -1,0 +1,16 @@
+*
+!*.*
+!*/
+
+.*
+!.gitignore
+!/.github
+/.vscode
+/build
+/build-*
+/config.nims
+*.exe
+/docs
+
+local_*
+local-*
