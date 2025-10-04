@@ -1,5 +1,16 @@
-import vmath, opengl, pixie
-export vmath, opengl, pixie
+import pkg/[vmath, opengl]
+import pkg/pixie/images as pixie
+
+when (compiles do: import imageman):
+  import pkg/imageman/[images as imagemanImages, colors as imagemanColors]
+  const hasImageman* = true
+else:
+  const hasImageman* = false
+
+export vmath, opengl
+
+# todo: import only needed functions from opengl, instead of full huge bundle
+
 
 type
   Buffers* = ref BuffersObj
@@ -12,14 +23,14 @@ type
     n: int32
     obj: UncheckedArray[GlUint]
   
-  Textures* = ref TexturesObj
-  TexturesObj = object
-    n: int32
-    obj: UncheckedArray[GlUint]
-  
   Shader* = ref ShaderObj
   ShaderObj = object
     obj: GlUint
+
+  FrameBuffers* = ref FrameBuffersObj
+  FrameBuffersObj = object
+    n: int32
+    obj: UncheckedArray[GlUint]
   
   ShaderCompileDefect* = object of Defect
 
@@ -29,11 +40,13 @@ type
     vao: VertexArrays
     bo: Buffers
 
+  OpenglUniform*[T] = distinct GlInt
 
-# -------- Buffers, VertexArrays, Textures --------
+
+# -------- Buffers, VertexArrays --------
 template makeOpenglObjectSeq(t, tobj, T, gen, del, newp) =
-  proc `=destroy`(x: var tobj) =
-    del(x.n, cast[ptr T](x.obj.addr))
+  proc `=destroy`(xobj {.inject.}: tobj) =
+    del(xobj.n, cast[ptr T](xobj.obj.addr))
 
   proc newp*(n: int): t =
     if n == 0: return
@@ -51,15 +64,17 @@ template makeOpenglObjectSeq(t, tobj, T, gen, del, newp) =
       raise IndexDefect.newException("index " & $i & " out of range 0..<" & $x.len)
     x.obj[i]
 
+
+{.push, warning[Effect]: off.}
 makeOpenglObjectSeq Buffers, BuffersObj, GlUint, glGenBuffers, glDeleteBuffers, newBuffers
 makeOpenglObjectSeq VertexArrays, VertexArraysObj, GlUint, glGenVertexArrays, glDeleteVertexArrays, newVertexArrays
-makeOpenglObjectSeq Textures, TexturesObj, GlUint, glGenTextures, glDeleteTextures, newTextures
+makeOpenglObjectSeq FrameBuffers, FrameBuffersObj, GlUint, glGenFrameBuffers, glDeleteFrameBuffers, newFrameBuffers
+{.pop.}
 
-proc `[]`*(x: Textures, i: enum): GlUint =
-  if i.int notin 0..<x.len:
-    raise IndexDefect.newException("index " & $i & " out of range 0..<" & $x.len)
-  x.obj[i.int]
 
+when defined(gcc):
+  {.passc: "-fcompare-debug-second".}  # seems like it hides warning about "passing flexieble array ABI changed in GCC 4.4"
+  # i don't care, gcc
 
 
 # -------- helpers --------
@@ -74,18 +89,28 @@ template withVertexArray*(vao: GlUint, body) =
   block: body
   glBindVertexArray(0)
 
-proc loadTexture*(obj: GlUint, data: pointer, w, h: int, kind = GlRgba) =
+
+proc loadTexture*(obj: GlUint, img: pixie.Image) =
   glBindTexture(GlTexture2d, obj)
-  glTexImage2D(GlTexture2d, 0, kind.GLint, w.GLsizei, h.GLsizei, 0, kind, GlUnsignedByte, data)
+  glTexImage2D(GlTexture2d, 0, GlRgba.GLint, img.width.GLsizei, img.height.GLsizei, 0, GlRgba, GlUnsignedByte, img.data[0].unsafeaddr)
   glGenerateMipmap(GlTexture2d)
   glBindTexture(GlTexture2d, 0)
+
+when hasImageman:
+  proc loadTexture*(obj: GlUint, img: imagemanImages.Image[imagemanColors.ColorRgbau]) =
+    glBindTexture(GlTexture2d, obj)
+    glTexImage2D(GlTexture2d, 0, GlRgba.GLint, img.width.GLsizei, img.height.GLsizei, 0, GlRgba, GlUnsignedByte, img.data[0].unsafeaddr)
+    glGenerateMipmap(GlTexture2d)
+    glBindTexture(GlTexture2d, 0)
 
 
 
 # -------- Shader --------
-proc `=destroy`(x: var ShaderObj) =
+{.push, warning[Effect]: off.}
+proc `=destroy`(x: ShaderObj) =
   if x.obj != 0:
     glDeleteProgram(x.obj)
+{.pop.}
 
 proc newShader*(shaders: openarray[(GlEnum, string)]): Shader =
   new result
@@ -142,6 +167,8 @@ proc `uniform=`*(i: GlInt, value: Vec4) =
 proc `uniform=`*(i: GlInt, value: Mat4) =
   glUniformMatrix4fv(i, 1, GlFalse, cast[ptr GlFloat](value.unsafeaddr))
 
+
+proc `uniform=`*[T](x: OpenglUniform[T], value: T) = x.GlInt.uniform = value
 
 
 # -------- Shape --------

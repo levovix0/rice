@@ -1,2 +1,2 @@
-import rice/[core, mouseArea, siwinOpenglApp]
-export core, mouseArea, siwinOpenglApp
+import rice/[gl, contexts, text]
+export gl, contexts, text
