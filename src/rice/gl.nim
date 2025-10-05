@@ -1,7 +1,7 @@
 import pkg/[vmath, opengl]
 import pkg/pixie/images as pixie
 
-when (compiles do: import imageman):
+when (compiles do: import pkg/imageman):
   import pkg/imageman/[images as imagemanImages, colors as imagemanColors]
   const hasImageman* = true
 else:
@@ -90,18 +90,19 @@ template withVertexArray*(vao: GlUint, body) =
   glBindVertexArray(0)
 
 
-proc loadTexture*(obj: GlUint, img: pixie.Image) =
+proc loadTexture*(obj: GlUint, size: IVec2, data: pointer) =
+  ## assumes data is encoded as uint 8-bit-per-component rgbx (like in pixie)
   glBindTexture(GlTexture2d, obj)
-  glTexImage2D(GlTexture2d, 0, GlRgba.GLint, img.width.GLsizei, img.height.GLsizei, 0, GlRgba, GlUnsignedByte, img.data[0].unsafeaddr)
+  glTexImage2D(GlTexture2d, 0, GlRgba.GLint, size.x.GLsizei, size.y.GLsizei, 0, GlRgba, GlUnsignedByte, data)
   glGenerateMipmap(GlTexture2d)
   glBindTexture(GlTexture2d, 0)
 
+proc loadTexture*(obj: GlUint, img: pixie.Image) =
+  obj.loadTexture(ivec2(img.width.int32, img.height.int32), img.data[0].addr)
+
 when hasImageman:
   proc loadTexture*(obj: GlUint, img: imagemanImages.Image[imagemanColors.ColorRgbau]) =
-    glBindTexture(GlTexture2d, obj)
-    glTexImage2D(GlTexture2d, 0, GlRgba.GLint, img.width.GLsizei, img.height.GLsizei, 0, GlRgba, GlUnsignedByte, img.data[0].unsafeaddr)
-    glGenerateMipmap(GlTexture2d)
-    glBindTexture(GlTexture2d, 0)
+    obj.loadTexture(ivec2(img.width.int32, img.height.int32), img.data[0].addr)
 
 
 
@@ -147,28 +148,35 @@ proc newShader*(shaders: openarray[(GlEnum, string)]): Shader =
 proc use*(x: Shader) =
   glUseProgram(x.obj)
 
-proc `[]`*(x: Shader, name: string): GlInt =
+proc `[]`*(x: Shader, name: string, onlyIfExists = false): GlInt =
   result = glGetUniformLocation(x.obj, name)
   if result == -1:
-    raise KeyError.newException("shader has no uniform " & name & " (is it unused?)")
+    if onlyIfExists:
+      raise KeyError.newException("shader has no uniform " & name & " (is it unused?)")
 
 proc `uniform=`*(i: GlInt, value: GlFloat) =
-  glUniform1f(i, value)
+  if i != -1:
+    glUniform1f(i, value)
 
 proc `uniform=`*(i: GlInt, value: Vec2) =
-  glUniform2f(i, value.x, value.y)
+  if i != -1:
+    glUniform2f(i, value.x, value.y)
 
 proc `uniform=`*(i: GlInt, value: Vec3) =
-  glUniform3f(i, value.x, value.y, value.z)
+  if i != -1:
+    glUniform3f(i, value.x, value.y, value.z)
 
 proc `uniform=`*(i: GlInt, value: Vec4) =
-  glUniform4f(i, value.x, value.y, value.z, value.w)
+  if i != -1:
+    glUniform4f(i, value.x, value.y, value.z, value.w)
 
 proc `uniform=`*(i: GlInt, value: Mat4) =
-  glUniformMatrix4fv(i, 1, GlFalse, cast[ptr GlFloat](value.unsafeaddr))
+  if i != -1:
+    glUniformMatrix4fv(i, 1, GlFalse, cast[ptr GlFloat](value.unsafeaddr))
 
 
-proc `uniform=`*[T](x: OpenglUniform[T], value: T) = x.GlInt.uniform = value
+proc `uniform=`*[T](x: OpenglUniform[T], value: T) =
+  x.GlInt.uniform = value
 
 
 # -------- Shape --------
