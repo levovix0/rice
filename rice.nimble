@@ -5,7 +5,14 @@ license       = "MIT"
 srcDir        = "src"
 
 requires "nim >= 2.2.4"
-requires "chroma"
-requires "vmath"
-requires "opengl"
-requires "shady"
+
+requires "chroma"  # for colors
+requires "vmath"   # for vectors
+requires "opengl"  # for opengl functions
+requires "shady"   # for writing shaders in nim
+requires "pixie"   # for fonts and paths
+requires "fusion"  # for astdsl (todo: remove)
+
+requires "siwin"   # for tests (todo: remove)
+
+

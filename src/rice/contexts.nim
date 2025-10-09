@@ -1,7 +1,7 @@
 import std/[tables, macros, sequtils, sets]
 import pkg/[shady, pixie]
 import pkg/fusion/[astdsl]
-import ./[gl, text as renderText]
+import ./[transform, gl, text as renderText]
 
 when hasImageman:
   import pkg/imageman/[images as imagemanImages, colors as imagemanColors]
@@ -25,6 +25,9 @@ type
     offset*: Vec2
 
     glyphBuffer*: GlyphBuffer
+
+    viewportToGlMatrix*: Mat4
+    glToViewportMatrix*: Mat4
 
 
 var freeTextures*: HashSet[GlUint]
@@ -471,6 +474,10 @@ proc mat4*(x: Mat2): Mat4 =
   )
 
 
+proc vec4*(color: chroma.Color): Vec4 =
+  vec4(color.r, color.g, color.b, color.a)
+
+
 proc passTransform*(ctx: DrawContext, shader: tuple|object|ref object, pos = vec2(), size = vec2(10, 10), angle: float32 = 0, flipY = false) =
   shader.transform.uniform =
     translate(vec3(ctx.px*(vec2(pos.x, -pos.y) - ctx.wh - (if flipY: vec2(0, size.y) else: vec2())), 0)) *
@@ -488,6 +495,30 @@ proc transformation*(glpos: var Vec4, pos: var Vec2, size, px, ipos: Vec2, trans
   pos = vec2(ipos.x * size.x, ipos.y * size.y)
 
 
+
+proc `viewportMatrix=`*(ctx: DrawContext, mat: Mat4) =
+  ctx.viewportToGlMatrix = mat
+  ctx.glToViewportMatrix = mat.inverse
+
+
+
+proc windowToGlNormalizedMatrix*(ctx: DrawContext): Mat4 =
+  ## returns matrix for converting from view plane coordinates [0..window.w, 0..window.h] (with y down)
+  ## to opengl view plane coordinates [-1..1, -1..1] (with y up)
+  combine(
+    scale(vec3(ctx.px.x, -ctx.px.y, 1 / 2000)),
+    translate(vec3(-1, 1, 0)),
+  )
+
+proc glNormalizedToWindowMatrix*(ctx: DrawContext): Mat4 =
+  ## returns matrix for converting from opengl view plane coordinates [-1..1, -1..1] (with y up)
+  ## to view plane coordinates [0..window.w, 0..window.h] (with y down)
+  combine(
+    translate(vec3(1, -1, 0)),
+    scale(vec3(ctx.wh.x / 2, -ctx.wh.y / 2, 2000)),
+  )
+
+
 proc newDrawContext*: DrawContext =
   new result
 
@@ -503,11 +534,14 @@ proc newDrawContext*: DrawContext =
     ]
   )
 
+  result.viewportMatrix = mat4()
+
 
 proc updateDrawingAreaSize*(ctx: DrawContext, size: IVec2) =
   # update size
   ctx.px = vec2(2'f32 / size.x.float32, 2'f32 / size.y.float32)
   ctx.wh = ivec2(size.x, -size.y).vec2 / 2
+
 
 
 proc drawText*(ctx: DrawContext, pos: Vec2, arrangement: Arrangement, color: Vec4) =
