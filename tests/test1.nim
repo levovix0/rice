@@ -92,11 +92,18 @@ test "basic":
   win.eventsHandler.onMouseMove = proc(e: MouseMoveEvent) =
     if e.window.mouse.pressed == {MouseButton.right}:
       let d = e.window.mouse.pos - mpos
+
+      let zv = vec2(
+        (-(mpos.y / e.window.size.y.float32 - 0.5) * 4).clamp(-1, 1),
+        ((mpos.x / e.window.size.x.float32 - 0.5) / (e.window.size.y / e.window.size.x).float32 * 4).clamp(-1, 1)
+      ).normalize
       
       rot = combine(
         rot,
-        rotateY(float32 d.x / e.window.size.x.float32 * 2*PI),
+        rotateY(float32 d.x / e.window.size.x.float32 / (e.window.size.y / e.window.size.x).float32 * 2*PI),
         rotateX(float32 d.y / e.window.size.y.float32 * 2*PI),
+        rotateZ(float32 d.x / e.window.size.x.float32 / (e.window.size.y / e.window.size.x).float32 * 2*PI * zv.x),
+        rotateZ(float32 d.y / e.window.size.y.float32 * 2*PI * zv.y),
       )
       
       mpos = e.window.mouse.pos
