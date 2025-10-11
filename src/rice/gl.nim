@@ -1,5 +1,7 @@
+import std/[sets]
 import pkg/[vmath, opengl]
 import pkg/pixie/images as pixie
+import pkg/pixie/common
 
 when (compiles do: import pkg/imageman):
   import pkg/imageman/[images as imagemanImages, colors as imagemanColors]
@@ -41,6 +43,13 @@ type
     bo: Buffers
 
   OpenglUniform*[T] = distinct GlInt
+
+  Texture* = ref TextureObj
+  TextureObj = object
+    glid: GlUint
+
+
+var freeTextures*: HashSet[GlUint]
 
 
 # -------- Buffers, VertexArrays --------
@@ -213,3 +222,48 @@ proc newShape*[T](vert: openarray[T], idx: openarray[GlUint], kind = GlTriangles
 proc draw*(x: Shape) =
   withVertexArray x.vao[0]:
     glDrawElements(x.kind, x.len.GlSizei, GlUnsignedInt, nil)
+
+
+
+#* ------------- textures ------------- *#
+
+const rice_render_texturesToAllocateIfNoFree {.intdefine.} = 8
+
+proc `=destroy`(texture: TextureObj) =
+  freeTextures.incl texture.glid
+  try:
+    texture.glid.loadTexture(pixie.newImage(1, 1))  # load empty image to force opengl use less memory
+  except GlError, PixieError:
+    discard
+
+
+proc raw*(texture: Texture): GlUint =
+  texture.glid
+
+
+proc newTexture*(): Texture =
+  if freeTextures.len == 0:
+    var newTextureGlUids: array[rice_render_texturesToAllocateIfNoFree, GlUint]
+    glGenTextures(rice_render_texturesToAllocateIfNoFree, newTextureGlUids[0].addr)
+    for i in 0..<rice_render_texturesToAllocateIfNoFree:
+      freeTextures.incl newTextureGlUids[i]
+  
+  new result
+  result.glid = freeTextures.pop
+
+
+proc load*(texture: Texture, image: pixie.Image) =
+  texture.raw.loadTexture(image)
+
+proc newTexture*(image: pixie.Image): Texture =
+  result = newTexture()
+  result.load(image)
+
+
+when hasImageman:
+  proc load*(texture: Texture, image: imagemanImages.Image[imagemanColors.ColorRgbau]) =
+    texture.raw.loadTexture(image)
+
+  proc newTexture*(image: imagemanImages.Image[imagemanColors.ColorRgbau]): Texture =
+    result = newTexture()
+    result.load(image)

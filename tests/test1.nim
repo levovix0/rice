@@ -8,80 +8,84 @@ test "basic":
   
   loadExtensions()
   let ctx = newDrawContext()
-
-  let fbo_col = newTexture()
-  let fbo_depth = newTexture()
-  var fbo = newFrameBuffers(1)
+  var aafb = newAntialiasedFramebuffer(depth = true)
 
   var time = 0'f32
 
   var rot = toAngles(vec3(1, 1, 1)).fromAngles()
+
+  var to_display = 0
   
   win.eventsHandler.onResize = proc(e: ResizeEvent) =
     glViewport 0, 0, e.size.x.GlInt, e.size.y.GlInt
     ctx.updateDrawingAreaSize(e.size)
-    ctx.viewportMatrix = scale(vec3(e.size.y / e.size.x, 1, 1))
+    aafb.resize(e.size)
 
-    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, fbo_col.raw)
-    glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_RGBA.GlInt, e.size.x.GlInt, e.size.y.GlInt, GL_TRUE)
-    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0)
-
-    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, fbo_depth.raw)
-    glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_DEPTH_COMPONENT.GlInt, e.size.x.GlInt, e.size.y.GlInt, GL_TRUE)
-    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0)
-
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo[0])
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, fbo_depth.raw, 0)
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, fbo_col.raw, 0)
-    glBindFramebuffer(GL_FRAMEBUFFER, 0)
 
   win.eventsHandler.onRender = proc(e: RenderEvent) =
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo[0])
+    startDraw aafb
 
     glClearColor(0.1, 0.1, 0.1, 1)
     glClearDepth(1.0)
     glClear(GL_COLOR_BUFFER_BIT or GL_DEPTH_BUFFER_BIT)
 
-    glEnable(GL_MULTISAMPLE)
-    glEnable(GL_DEPTH_TEST)
-
     let (vw, vh) = (e.window.size.x, e.window.size.y)
 
-    for i in countdown(1, -1, 2):
+    case to_display mod 2
+    of 0:
+      ctx.viewportMatrix = combine(
+        scale(vec3(2 / vw, -2 / vh, 1)),
+        translate(vec3(-1, 1, 0)),
+      )
+
+      var rect = rect(vw/2 - 400/2, vh/2 - 200/2, 400, 200)
       ctx.fillRect(
-        rect(-0.25, -0.25, 0.5, 0.5),
-        color(1, 0.2, 0.2).darken(if i < 0: 0.2 else: 0),
+        rect,
+        color(1, 0.2, 0.2),
         combine(
-          translate(vec3(0, 0, -0.25 * i.float32)),
-          rotateY(float32 PI/2),
-          rot,
+          rotateZ(origin = vec3(rect.xy + rect.wh/2, 0), time / 4),
         )
       )
 
-      ctx.fillRect(
-        rect(-0.25, -0.25, 0.5, 0.5),
-        color(0.2, 1, 0.2).darken(if i < 0: 0.2 else: 0),
-        combine(
-          translate(vec3(0, 0, -0.25 * i.float32)),
-          rotateX(float32 -PI/2),
-          rot,
-        )
-      )
 
-      ctx.fillRect(
-        rect(-0.25, -0.25, 0.5, 0.5),
-        color(0.2, 0.2, 1).darken(if i < 0: 0.2 else: 0),
-        combine(
-          translate(vec3(0, 0, -0.25 * i.float32)),
-          rot,
-        )
-      )
+    of 1:
+      ctx.viewportMatrix = scale(vec3(vh / vw, 1, 1))
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0)
-    
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo[0])
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0)
-    glBlitFramebuffer(0, 0, vw, vh, 0, 0, vw, vh, GL_COLOR_BUFFER_BIT, GL_NEAREST.GlEnum)
+      for i in countdown(1, -1, 2):
+        ctx.fillRect(
+          rect(-0.25, -0.25, 0.5, 0.5),
+          color(1, 0.2, 0.2).darken(if i < 0: 0.2 else: 0),
+          combine(
+            translate(vec3(0, 0, -0.25 * i.float32)),
+            rotateY(float32 PI/2),
+            rot,
+          )
+        )
+
+        ctx.fillRect(
+          rect(-0.25, -0.25, 0.5, 0.5),
+          color(0.2, 1, 0.2).darken(if i < 0: 0.2 else: 0),
+          combine(
+            translate(vec3(0, 0, -0.25 * i.float32)),
+            rotateX(float32 -PI/2),
+            rot,
+          )
+        )
+
+        ctx.fillRect(
+          rect(-0.25, -0.25, 0.5, 0.5),
+          color(0.2, 0.2, 1).darken(if i < 0: 0.2 else: 0),
+          combine(
+            translate(vec3(0, 0, -0.25 * i.float32)),
+            rot,
+          )
+        )
+      
+    else: discard
+
+    endDraw aafb, 0
+    blit aafb, 0
+
 
 
   var mpos = vec2()
@@ -108,6 +112,12 @@ test "basic":
       
       mpos = e.window.mouse.pos
 
+  win.eventsHandler.onKey = proc(e: KeyEvent) =
+    if e.pressed:
+      case e.key
+      of Key.right: inc to_display
+      of Key.left:  dec to_display
+      else: discard
 
   win.eventsHandler.onTick = proc(e: TickEvent) =
     time += e.deltaTime.inMicroseconds / 1_000_000

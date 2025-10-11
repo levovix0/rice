@@ -1,4 +1,4 @@
-import std/[tables, macros, sequtils, sets]
+import std/[tables, macros, sequtils]
 import pkg/[shady, pixie]
 import pkg/fusion/[astdsl]
 import ./[transform, gl, text as renderText]
@@ -8,11 +8,6 @@ when hasImageman:
 
 
 type
-  Texture* = ref TextureObj
-  TextureObj = object
-    glid: GlUint
-
-
   DrawContext* = ref object
     rect*: Shape
 
@@ -28,53 +23,6 @@ type
 
     viewportToGlMatrix*: Mat4
     glToViewportMatrix*: Mat4
-
-
-var freeTextures*: HashSet[GlUint]
-
-
-#* ------------- textures ------------- *#
-
-const rice_render_texturesToAllocateIfNoFree {.intdefine.} = 8
-
-proc `=destroy`(texture: TextureObj) =
-  freeTextures.incl texture.glid
-  try:
-    texture.glid.loadTexture(pixie.newImage(1, 1))  # load empty image to force opengl use less memory
-  except GlError, PixieError:
-    discard
-
-
-proc raw*(texture: Texture): GlUint =
-  texture.glid
-
-
-proc newTexture*(): Texture =
-  if freeTextures.len == 0:
-    var newTextureGlUids: array[rice_render_texturesToAllocateIfNoFree, GlUint]
-    glGenTextures(rice_render_texturesToAllocateIfNoFree, newTextureGlUids[0].addr)
-    for i in 0..<rice_render_texturesToAllocateIfNoFree:
-      freeTextures.incl newTextureGlUids[i]
-  
-  new result
-  result.glid = freeTextures.pop
-
-
-proc load*(texture: Texture, image: pixie.Image) =
-  texture.raw.loadTexture(image)
-
-proc newTexture*(image: pixie.Image): Texture =
-  result = newTexture()
-  result.load(image)
-
-
-when hasImageman:
-  proc load*(texture: Texture, image: imagemanImages.Image[imagemanColors.ColorRgbau]) =
-    texture.raw.loadTexture(image)
-
-  proc newTexture*(image: imagemanImages.Image[imagemanColors.ColorRgbau]): Texture =
-    result = newTexture()
-    result.load(image)
 
 
 
@@ -245,7 +193,8 @@ macro makeShaderImpl(ctx: DrawContext, body: untyped, uniforms: typed): auto =
       let uniformIdx = body[1].intVal
       let typedUniform = uniforms[uniformIdx]
       
-      let name = "uniform_" & (if typedUniform.kind == nnkSym: typedUniform.strVal else: $uniformIdx)
+      let name = (if typedUniform.kind in {nnkSym, nnkIdent}: typedUniform.strVal else: "uniform_" & $uniformIdx)
+      # todo: deduce name for uniforms like `this.my.x` as "this_my_x"
       uniformsTable[name] = typedUniform.getTypeInst.fixVmathTypes
       uniformsInitTable[name] = typedUniform
       

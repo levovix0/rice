@@ -1,2 +1,2 @@
-import rice/[gl, transform, contexts, text, primitives]
-export gl, transform, contexts, text, primitives
+import rice/[gl, transform, contexts, text, primitives, antialiasing]
+export gl, transform, contexts, text, primitives, antialiasing
