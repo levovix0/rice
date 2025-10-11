@@ -21,6 +21,7 @@ proc hasDepth*(this: AntialiasedFramebuffer): bool =
 
 
 proc resize*(this: var AntialiasedFramebuffer, size: IVec2) =
+  if this.size == size: return
   this.size = size
 
   glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, this.col.raw)
@@ -75,10 +76,9 @@ when isMainModule:
   win.eventsHandler.onResize = proc(e: ResizeEvent) =
     glViewport 0, 0, e.size.x.GlInt, e.size.y.GlInt
     ctx.updateDrawingAreaSize(e.size)
-    aafb.resize(e.size)  #! <----
-
 
   win.eventsHandler.onRender = proc(e: RenderEvent) =
+    aafb.resize(e.window.size)  #! <----
     startDraw aafb  #! <----
 
     glClearColor(0.1, 0.1, 0.1, 1)

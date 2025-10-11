@@ -16,7 +16,9 @@ type
     px*: Vec2  ## size of a pixel
     wh*: Vec2  ## size of the drawing area in pixels
 
-    frameBufferHierarchy*: seq[tuple[fbo: GlUint, size: IVec2]]
+    fbo*: GlUint = 0
+    fboSize*: IVec2
+    
     offset*: Vec2
 
     glyphBuffer*: GlyphBuffer
@@ -487,9 +489,10 @@ proc newDrawContext*: DrawContext =
 
 
 proc updateDrawingAreaSize*(ctx: DrawContext, size: IVec2) =
-  # update size
+  ## update size
   ctx.px = vec2(2'f32 / size.x.float32, 2'f32 / size.y.float32)
   ctx.wh = ivec2(size.x, -size.y).vec2 / 2
+  ctx.fboSize = size
 
 
 

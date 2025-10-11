@@ -5,26 +5,17 @@ import rice
 
 test "basic":
   let win = newSiwinGlobals().newOpenglWindow()
-  
   loadExtensions()
+  
   let ctx = newDrawContext()
   var aafb = newAntialiasedFramebuffer(depth = true)
 
   var time = 0'f32
-
   var rot = toAngles(vec3(1, 1, 1)).fromAngles()
-
   var to_display = 0
-  
-  win.eventsHandler.onResize = proc(e: ResizeEvent) =
-    glViewport 0, 0, e.size.x.GlInt, e.size.y.GlInt
-    ctx.updateDrawingAreaSize(e.size)
-    aafb.resize(e.size)
 
 
-  win.eventsHandler.onRender = proc(e: RenderEvent) =
-    startDraw aafb
-
+  proc render(e: RenderEvent) =
     glClearColor(0.1, 0.1, 0.1, 1)
     glClearDepth(1.0)
     glClear(GL_COLOR_BUFFER_BIT or GL_DEPTH_BUFFER_BIT)
@@ -82,11 +73,14 @@ test "basic":
         )
       
     else: discard
+  
 
-    endDraw aafb, 0
-    blit aafb, 0
+  win.eventsHandler.onResize = proc(e: ResizeEvent) =
+    glViewport 0, 0, e.size.x.GlInt, e.size.y.GlInt
+    ctx.updateDrawingAreaSize(e.size)
 
-
+  win.eventsHandler.onRender = proc(e: RenderEvent) =
+    ctx.drawInside aafb: render(e)
 
   var mpos = vec2()
   win.eventsHandler.onMouseButton = proc(e: MouseButtonEvent) =
@@ -122,6 +116,7 @@ test "basic":
   win.eventsHandler.onTick = proc(e: TickEvent) =
     time += e.deltaTime.inMicroseconds / 1_000_000
     redraw win
+  
   
   run win
 
