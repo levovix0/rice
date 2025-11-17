@@ -1,4 +1,4 @@
-import std/[strutils, strformat, enumutils, sequtils]
+import std/[strutils, strformat, enumutils]
 import pkg/vmath
 import ../[gl]
 
