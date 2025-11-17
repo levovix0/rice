@@ -195,7 +195,7 @@ macro makeShaderImpl(ctx: DrawContext, body: untyped, uniforms: typed): auto =
       let uniformIdx = body[1].intVal
       let typedUniform = uniforms[uniformIdx]
       
-      let name = (if typedUniform.kind in {nnkSym, nnkIdent}: typedUniform.strVal else: "uniform_" & $uniformIdx)
+      let name = (if typedUniform.kind in {nnkSym, nnkIdent}: "u_" & typedUniform.strVal else: "uniform_" & $uniformIdx)
       # todo: deduce name for uniforms like `this.my.x` as "this_my_x"
       uniformsTable[name] = typedUniform.getTypeInst.fixVmathTypes
       uniformsInitTable[name] = typedUniform

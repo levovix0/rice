@@ -15,6 +15,9 @@ test "basic":
   var to_display = 0
 
 
+  let lever_mechanism = staticRead("data/lever_mechanism.stl").static.parseStlAscii(Shape)
+
+
   proc render(e: RenderEvent) =
     glClearColor(0.1, 0.1, 0.1, 1)
     glClearDepth(1.0)
@@ -22,7 +25,7 @@ test "basic":
 
     let (vw, vh) = (e.window.size.x, e.window.size.y)
 
-    case to_display mod 2
+    case to_display mod 3
     of 0:
       ctx.viewportMatrix = combine(
         scale(vec3(2 / vw, -2 / vh, 1)),
@@ -71,6 +74,22 @@ test "basic":
             rot,
           )
         )
+      
+    of 2:
+      ctx.viewportMatrix = scale(vec3(vh / vw, 1, 1/1000))
+
+      ctx.draw3dShapeShadedByNormalsSingleSide(
+        shape = lever_mechanism,
+        # color = color(0.3, 0.79, 1).lighten(0.1),
+        # shadowColor = color(0.23, 0.04, 0.38),
+        lightDir = vec3(0, 0, 1),
+        transform = combine(
+          rotateX(float32 Pi / 2),
+          translate(vec3(0, -0.5, 0)),
+          rot,
+        )
+      )
+
       
     else: discard
   

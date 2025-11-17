@@ -1,33 +1,5 @@
 import pkg/[bumpy, chroma, vmath, shady]
-import ./[gl, transform, contexts]
-
-
-proc push_blendRgbx*(ctx: DrawContext) =
-  glEnable(GlBlend)
-  glBlendFuncSeparate(GlOne, GlOneMinusSrcAlpha, GlOne, GlOne)
-
-proc pop_blendRgbx*(ctx: DrawContext) =
-  glDisable(GlBlend)
-
-
-when false:  # never used
-  proc push_multisampling*(ctx: DrawContext) =
-    glEnable(GlMultisample)
-
-  proc pop_multisampling*(ctx: DrawContext) =
-    glDisable(GlMultisample)
-
-
-template withPushPop*(ctx: DrawContext, name, body: untyped) =
-  `push name`(ctx)
-  body
-  `pop name`(ctx)
-
-template withPushPopIf*(ctx: DrawContext, name, cond, body: untyped) =
-  let b = cond
-  if b: `push name`(ctx)
-  body
-  if b: `pop name`(ctx)
+import ./[gl, transform, contexts, contextutils]
 
 
 
@@ -51,7 +23,7 @@ proc fillRect*(ctx: DrawContext, rect: Rect, color: Color, transform: Mat4 = mat
       
       glCol = @(color.vec4)
 
-  ctx.withPushPopIf blendRgbx, color.a != 1:
+  ctx.withPushPopIf blendRgbx, color.a != 1:  # todo: think of a better solution for managing the "state" of opengl
     useAndPassUniforms shader
     draw ctx.rect
 

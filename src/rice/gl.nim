@@ -36,11 +36,17 @@ type
   
   ShaderCompileDefect* = object of Defect
 
-  Shape* = ref object
+
+  ShapeFlag = enum
+    hasIndices
+  
+  Shape* = object
     kind: GlEnum
     len: int
     vao: VertexArrays
     bo: Buffers
+    flags: set[ShapeFlag]
+
 
   OpenglUniform*[T] = distinct GlInt
 
@@ -206,11 +212,11 @@ proc makeAttributes(t: type) =
 
 
 proc newShape*[T](vert: openarray[T], idx: openarray[GlUint], kind = GlTriangles): Shape =
-  new result
   result.vao = newVertexArrays(1)
   result.bo = newBuffers(2)
   result.len = idx.len
   result.kind = kind
+  result.flags = {ShapeFlag.hasIndices}
 
   withVertexArray result.vao[0]:
     glBindBuffer GlArrayBuffer, result.bo[0]
@@ -219,9 +225,27 @@ proc newShape*[T](vert: openarray[T], idx: openarray[GlUint], kind = GlTriangles
     elementArrayBufferData idx
     makeAttributes T
 
+
+proc newShape*[T](vert: openarray[T], kind = GlTriangles): Shape =
+  result.vao = newVertexArrays(1)
+  result.bo = newBuffers(1)
+  result.len = vert.len
+  result.kind = kind
+  result.flags = {}
+
+  withVertexArray result.vao[0]:
+    glBindBuffer GlArrayBuffer, result.bo[0]
+    arrayBufferData vert
+    makeAttributes T
+
+
 proc draw*(x: Shape) =
+  assert x.len != 0, "trying to draw empty shape, probably uninitialized"
   withVertexArray x.vao[0]:
-    glDrawElements(x.kind, x.len.GlSizei, GlUnsignedInt, nil)
+    if hasIndices in x.flags:
+      glDrawElements(x.kind, x.len.GlSizei, GlUnsignedInt, nil)
+    else:
+      glDrawArrays(x.kind, 0, x.len.GlSizei)
 
 
 

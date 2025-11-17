@@ -1,2 +1,11 @@
-import rice/[gl, transform, contexts, text, primitives, antialiasing, contextutils]
-export gl, transform, contexts, text, primitives, antialiasing, contextutils
+import rice/[
+  transform,
+  gl, contexts, contextutils, antialiasing,
+  text, primitives, polygonal3d,
+  fileformats
+]
+export
+  transform,
+  gl, contexts, contextutils, antialiasing,
+  text, primitives, polygonal3d,
+  fileformats

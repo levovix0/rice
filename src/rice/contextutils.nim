@@ -23,3 +23,31 @@ template drawInside*(ctx: DrawContext, buf: var AntialiasedFramebuffer, body: un
   bind drawInsideImpl
   drawInsideImpl(ctx, buf, proc = body)
 
+
+proc push_blendRgbx*(ctx: DrawContext) =
+  glEnable(GlBlend)
+  glBlendFuncSeparate(GlOne, GlOneMinusSrcAlpha, GlOne, GlOne)
+
+proc pop_blendRgbx*(ctx: DrawContext) =
+  glDisable(GlBlend)
+
+
+when false:  # never used
+  proc push_multisampling*(ctx: DrawContext) =
+    glEnable(GlMultisample)
+
+  proc pop_multisampling*(ctx: DrawContext) =
+    glDisable(GlMultisample)
+
+
+template withPushPop*(ctx: DrawContext, name, body: untyped) =
+  `push name`(ctx)
+  body
+  `pop name`(ctx)
+
+template withPushPopIf*(ctx: DrawContext, name, cond, body: untyped) =
+  let b = cond
+  if b: `push name`(ctx)
+  body
+  if b: `pop name`(ctx)
+
