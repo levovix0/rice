@@ -36,8 +36,9 @@ proc draw3dShapeShadedByNormalsSingleSide*(
   ctx: DrawContext,
   shape: Shape,
   color: Color = color(1, 1, 1),
-  shadowColor: Color = color(0, 0, 0),
+  shadowColor: Color = color(0.4, 0.4, 0.4),
   lightDir: Vec3 = vec3(-1, -1, -1).normalize,
+  backlight: float = 0.6,
   transform: Mat4 = mat4(),
 ) =
   let view = ctx.viewportToGlMatrix
@@ -50,8 +51,14 @@ proc draw3dShapeShadedByNormalsSingleSide*(
       var color {.out.}: Vec4
 
       gl_Position = @(view) * @(transform) * vec4(inPos.xyz, 1)
+
       let normal = @(transform) * vec4(inNormal.xyz, 1)
-      let light = sqrt(dot(@(-lightDir.normalize), (normal / normal.length).xyz).clamp(0, 1))
+      
+      let lightV = dot(@(-lightDir.normalize), (normal / normal.length).xyz)
+      let light =
+        if lightV > 0: lightV
+        else: -lightV * @(backlight)
+
       color = @(color.asRgbx.vec4) * light + @(shadowColor.asRgbx.vec4) * (1 - light)
     
     proc frag =

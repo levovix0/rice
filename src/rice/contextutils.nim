@@ -1,5 +1,8 @@
 import ./[gl, contexts, antialiasing]
 
+const PiF* = Pi.float32
+  ## Pi, but float32
+
 
 proc drawInsideImpl(ctx: DrawContext, buf: var AntialiasedFramebuffer, body: proc()) =
   let old_fbo = ctx.fbo

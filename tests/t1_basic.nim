@@ -12,6 +12,8 @@ test "basic":
 
   var time = 0'f32
   var rot = toAngles(vec3(1, 1, 1)).fromAngles()
+  var pos = vec3()
+  var zoom = 1'f32
   var to_display = 0
 
 
@@ -37,13 +39,18 @@ test "basic":
         rect,
         color(1, 0.2, 0.2),
         combine(
-          rotateZ(origin = vec3(rect.xy + rect.wh/2, 0), time / 4),
+          rotateZ(time / 4, origin = vec3(rect.xy + rect.wh/2, 0)),
         )
       )
 
 
     of 1:
-      ctx.viewportMatrix = scale(vec3(vh / vw, 1, 1))
+      ctx.viewportMatrix = combine(
+        translate(pos),
+        rot,
+        scale(vec3(zoom)),
+        scale(vec3(vh / vw, 1, 1/1000))
+      )
 
       for i in countdown(1, -1, 2):
         ctx.fillRect(
@@ -51,8 +58,7 @@ test "basic":
           color(1, 0.2, 0.2).darken(if i < 0: 0.2 else: 0),
           combine(
             translate(vec3(0, 0, -0.25 * i.float32)),
-            rotateY(float32 PI/2),
-            rot,
+            rotateY(float32 Pi/2),
           )
         )
 
@@ -61,8 +67,7 @@ test "basic":
           color(0.2, 1, 0.2).darken(if i < 0: 0.2 else: 0),
           combine(
             translate(vec3(0, 0, -0.25 * i.float32)),
-            rotateX(float32 -PI/2),
-            rot,
+            rotateX(float32 -Pi/2),
           )
         )
 
@@ -71,22 +76,25 @@ test "basic":
           color(0.2, 0.2, 1).darken(if i < 0: 0.2 else: 0),
           combine(
             translate(vec3(0, 0, -0.25 * i.float32)),
-            rot,
           )
         )
       
     of 2:
-      ctx.viewportMatrix = scale(vec3(vh / vw, 1, 1/1000))
+      ctx.viewportMatrix = combine(
+        translate(pos),
+        rot,
+        scale(vec3(zoom)),
+        scale(vec3(vh / vw, 1, 1/1000))
+      )
 
       ctx.draw3dShapeShadedByNormalsSingleSide(
         shape = lever_mechanism,
         # color = color(0.3, 0.79, 1).lighten(0.1),
-        # shadowColor = color(0.23, 0.04, 0.38),
-        lightDir = vec3(0, 0, 1),
+        shadowColor = color(0.4, 0.4, 0.4),
+        lightDir = vec3(-0.5, -0.5, 1),
         transform = combine(
           rotateX(float32 Pi / 2),
           translate(vec3(0, -0.5, 0)),
-          rot,
         )
       )
 
@@ -98,32 +106,56 @@ test "basic":
     glViewport 0, 0, e.size.x.GlInt, e.size.y.GlInt
     ctx.updateDrawingAreaSize(e.size)
 
+
   win.eventsHandler.onRender = proc(e: RenderEvent) =
     ctx.drawInside aafb: render(e)
 
+
   var mpos = vec2()
   win.eventsHandler.onMouseButton = proc(e: MouseButtonEvent) =
-    if e.window.mouse.pressed == {MouseButton.right}:
-      mpos = e.window.mouse.pos
+    mpos = e.window.mouse.pos
+
 
   win.eventsHandler.onMouseMove = proc(e: MouseMoveEvent) =
-    if e.window.mouse.pressed == {MouseButton.right}:
-      let d = e.window.mouse.pos - mpos
+    let d = e.window.mouse.pos - mpos
+    let dn = d / vec2(
+      e.window.size.x.float32 * (e.window.size.y / e.window.size.x).float32,
+      e.window.size.y.float32
+    ) * 2
 
+    if e.window.mouse.pressed == {MouseButton.right}:
       let zv = vec2(
-        (-(mpos.y / e.window.size.y.float32 - 0.5) * 4).clamp(-1, 1),
-        ((mpos.x / e.window.size.x.float32 - 0.5) / (e.window.size.y / e.window.size.x).float32 * 4).clamp(-1, 1)
+        (-(mpos.y / e.window.size.y.float32 - 0.5)).clamp(-1, 1) / 2,
+        ((mpos.x / e.window.size.x.float32 - 0.5) / (e.window.size.y / e.window.size.x).float32).clamp(-1, 1) / 2
       ).normalize
       
       rot = combine(
         rot,
-        rotateY(float32 d.x / e.window.size.x.float32 / (e.window.size.y / e.window.size.x).float32 * 2*PI),
-        rotateX(float32 d.y / e.window.size.y.float32 * 2*PI),
-        rotateZ(float32 d.x / e.window.size.x.float32 / (e.window.size.y / e.window.size.x).float32 * 2*PI * zv.x),
-        rotateZ(float32 d.y / e.window.size.y.float32 * 2*PI * zv.y),
+        rotateY[float32](dn.x * Pi),
+        rotateX[float32](dn.y * Pi),
+        rotateZ[float32](dn.x * Pi * zv.x),
+        rotateZ[float32](dn.y * Pi * zv.y),
       )
+    
+    elif e.window.mouse.pressed == {MouseButton.middle}:
+      pos = pos - rot.inverse * vec3(-dn.x, dn.y, 0) / zoom
       
-      mpos = e.window.mouse.pos
+    mpos = e.window.mouse.pos
+  
+
+  win.eventsHandler.onScroll = proc(e: ScrollEvent) =
+    let sd = (-e.delta).clamp(-1, 1)
+    
+    zoom *= sd * 0.2 + 1
+
+    let d = e.window.mouse.pos - e.window.size.vec2 / 2
+    let dn = d / vec2(
+      e.window.size.x.float32 * (e.window.size.y / e.window.size.x).float32,
+      e.window.size.y.float32
+    ) * 2 * -sd * 0.2 / zoom
+    
+    pos = pos - rot.inverse * vec3(-dn.x, dn.y, 0)
+
 
   win.eventsHandler.onKey = proc(e: KeyEvent) =
     if e.pressed:
@@ -131,6 +163,7 @@ test "basic":
       of Key.right: inc to_display
       of Key.left:  dec to_display
       else: discard
+
 
   win.eventsHandler.onTick = proc(e: TickEvent) =
     time += e.deltaTime.inMicroseconds / 1_000_000
