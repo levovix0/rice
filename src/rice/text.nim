@@ -24,9 +24,9 @@ type
     families*: Table[GlyphFamily, GlyphFamilyBuffer]
 
 
-const sigui_glyphBuffer_textureSize* {.intdefine.} = 1024
+const rice_glyphBuffer_textureSize* {.intdefine.} = 1024
 
-const ts = sigui_glyphBuffer_textureSize
+const ts = rice_glyphBuffer_textureSize
 
 
 proc render(familyBuffer: var GlyphFamilyBuffer, placement: var GlyphPlacement, rune: Rune, font: Font, size: Vec2) =

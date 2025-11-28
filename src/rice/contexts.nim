@@ -508,9 +508,11 @@ proc updateDrawingAreaSize*(ctx: DrawContext, size: IVec2) =
 
 
 
-proc drawText*(ctx: DrawContext, pos: Vec2, arrangement: Arrangement, color: Vec4) =
+proc drawText*(ctx: DrawContext, pos: Vec3, arrangement: Arrangement, color: Vec4, origin: Vec2 = vec2(0.5, 0.5)) =
   if arrangement == nil or arrangement.fonts.len == 0:
     return
+
+  let pos = ctx.viewportToGlMatrix * pos
 
   let shader = ctx.makeShader:
     proc vert(transform: Uniform[Vec4], placement: Uniform[Vec4]) =
@@ -534,6 +536,7 @@ proc drawText*(ctx: DrawContext, pos: Vec2, arrangement: Arrangement, color: Vec
   let family = ctx.glyphBuffer.families.mgetOrPut(arrangement.fonts[0].glyphFamily, GlyphFamilyBuffer()).addr
 
   var prevTexture = -1.Gluint
+  let box = arrangement.computeBounds()
 
   for i, rune in arrangement.runes:
     var rect = arrangement.selectionRects[i]
@@ -542,17 +545,19 @@ proc drawText*(ctx: DrawContext, pos: Vec2, arrangement: Arrangement, color: Vec
     # todo: force pixie to adjust text to pixel grid while generating arrangement, for better alligning
     
     shader.transform.uniform =
-      vec4(vec2(-1, 1) +
-      vec2(pos.x + rect.x, -(pos.y + rect.y)) * ctx.px, vec2(rect.w, -rect.h) * ctx.px)
+      vec4(
+        pos.xy + rect.xy * ctx.px - vec2(box.w - box.x, -(box.h - box.y)) * origin * ctx.px,
+        vec2(rect.w, -rect.h) * ctx.px
+      )
 
     let texPlacement = family[].renderIfNeeded(rune, arrangement.fonts[0], rect.wh)
     shader.placement.uniform =
       vec4(
         vec2(texPlacement.x.float, texPlacement.y.float) /
-        vec2(sigui_glyphBuffer_textureSize, sigui_glyphBuffer_textureSize),
+        vec2(rice_glyphBuffer_textureSize, rice_glyphBuffer_textureSize),
 
         rect.wh /
-        vec2(sigui_glyphBuffer_textureSize, sigui_glyphBuffer_textureSize)
+        vec2(rice_glyphBuffer_textureSize, rice_glyphBuffer_textureSize)
       )
     
     if prevTexture != texPlacement.texture:
