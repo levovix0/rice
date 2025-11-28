@@ -1,5 +1,6 @@
 import ./[gl, contexts, antialiasing]
 
+
 const PiF* = Pi.float32
   ## Pi, but float32
 
@@ -53,4 +54,33 @@ template withPushPopIf*(ctx: DrawContext, name, cond, body: untyped) =
   if b: `push name`(ctx)
   body
   if b: `pop name`(ctx)
+
+
+proc setFaceCulling*(ctx: DrawContext, enabled: bool, faceToKeep: FaceOrientation, frontFace: WindingOrder) =
+  if enabled:
+    glEnable(GL_CULL_FACE)
+    
+    glCullFace case faceToKeep
+      of front: GL_FRONT
+      of back: GL_BACK
+
+    glFrontFace case frontFace
+      of cw: GL_CW
+      of ccw: GL_CCW
+  else:
+    glDisable(GL_CULL_FACE)
+
+
+
+template withFaceCulling*(ctx: DrawContext, faceToKeep, frontFace, body: untyped) =
+  bind setFaceCulling, glDisable, GL_CULL_FACE
+  setFaceCulling(ctx, true, faceToKeep, frontFace)
+  body
+  glDisable(GL_CULL_FACE)
+
+template withFaceCulling*(ctx: DrawContext, faceToKeep, body: untyped) =
+  withFaceCulling(ctx, faceToKeep, WindingOrder.ccw, body)
+
+template withFaceCulling*(ctx: DrawContext, body: untyped) =
+  withFaceCulling(ctx, FaceOrientation.front, WindingOrder.ccw, body)
 

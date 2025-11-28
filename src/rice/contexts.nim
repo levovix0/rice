@@ -3,11 +3,23 @@ import pkg/[shady, pixie]
 import pkg/fusion/[astdsl]
 import ./[transform, gl, text as renderText]
 
+# todo: remove dependency on fusion
+
+
 when hasImageman:
   import pkg/imageman/[images as imagemanImages, colors as imagemanColors]
 
 
 type
+  FaceOrientation* = enum
+    front
+    back
+  
+  WindingOrder* = enum
+    cw   # clockwise
+    ccw  # counter-clockwise
+
+
   DrawContext* = ref object
     rect*: Shape
 

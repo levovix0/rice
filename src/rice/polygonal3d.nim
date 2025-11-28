@@ -19,7 +19,7 @@ proc draw3dShapeFlat*(
       var inPos {.inp.}: Vec3
       var gl_Position {.outGl.}: Vec4
 
-      gl_Position = @(transform) * vec4(inPos.xyz, 1)
+      gl_Position = @(transform) * vec4(inPos, 1)
     
     proc frag =
       var glCol {.outGl.}: Vec4
@@ -50,9 +50,9 @@ proc draw3dShapeShadedByNormalsSingleSide*(
       var gl_Position {.outGl.}: Vec4
       var color {.out.}: Vec4
 
-      gl_Position = @(view) * @(transform) * vec4(inPos.xyz, 1)
+      gl_Position = @(view) * @(transform) * vec4(inPos, 1)
 
-      let normal = @(transform) * vec4(inNormal.xyz, 1)
+      let normal = @(transform) * vec4(inNormal, 1)
       
       let lightV = dot(@(-lightDir.normalize), (normal / normal.length).xyz)
       let light =
@@ -66,7 +66,7 @@ proc draw3dShapeShadedByNormalsSingleSide*(
 
       glCol = color
 
-  ctx.withPushPopIf blendRgbx, color.a != 1:
+  ctx.withPushPopIf blendRgbx, color.a != 1 or shadowColor.a != 1:
     useAndPassUniforms shader
     draw shape
 

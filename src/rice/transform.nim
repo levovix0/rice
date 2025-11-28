@@ -6,6 +6,8 @@ proc combine*(a, b: Mat4): Mat4 =
 
 
 proc combine*(matrices: varargs[Mat4]): Mat4 =
+  if matrices.len == 0: return mat4()
+  
   result = matrices[0]
   for i in 1 .. matrices.high:
     result = matrices[i] * result

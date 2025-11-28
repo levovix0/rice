@@ -87,10 +87,24 @@ test "basic":
         scale(vec3(vh / vw, 1, 1/1000))
       )
 
+      ctx.withFaceCulling back:
+        ctx.draw3dShapeFlat(
+          shape = lever_mechanism,
+          color = color(0.3, 0.79, 1),
+          transform = combine(
+            rotateX(float32 Pi / 2),
+            translate(vec3(0, -0.5, 0)),
+            scale(vec3(1.02, 1.02, 1.02)),
+          )
+        )
+        # todo: show outline only if shape is exactly hovered by mouse
+        # todo: create outline by extruding points along normals and connecting resulting triangles/quads
+        # todo: post-processing outline
+
       ctx.draw3dShapeShadedByNormalsSingleSide(
         shape = lever_mechanism,
         # color = color(0.3, 0.79, 1).lighten(0.1),
-        shadowColor = color(0.4, 0.4, 0.4),
+        # shadowColor = color(0.4, 0.4, 0.4),
         lightDir = vec3(-0.5, -0.5, 1),
         transform = combine(
           rotateX(float32 Pi / 2),
