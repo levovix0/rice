@@ -30,7 +30,7 @@ test "basic":
 
     case to_display mod 3
     of 0:
-      ctx.viewportMatrix = combine(
+      ctx.viewport = combine(
         scale(vec3(2 / vw, -2 / vh, 1)),
         translate(vec3(-1, 1, 0)),
       )
@@ -46,7 +46,7 @@ test "basic":
 
 
     of 1:
-      ctx.viewportMatrix = combine(
+      ctx.viewport = combine(
         translate(pos),
         rot,
         scale(vec3(zoom)),
@@ -81,7 +81,7 @@ test "basic":
         )
       
     of 2:
-      ctx.viewportMatrix = combine(
+      ctx.viewport = combine(
         translate(pos),
         rot,
         scale(vec3(zoom)),

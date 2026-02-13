@@ -35,8 +35,10 @@ type
 
     glyphBuffer*: GlyphBuffer
 
-    viewportToGlMatrix*: Mat4
-    glToViewportMatrix*: Mat4
+    viewportMatrix*: Mat4 = mat4()
+    projectionMatrix*: Mat4 = mat4()
+    viewportToGlMatrix*: Mat4 = mat4()
+    glToViewportMatrix*: Mat4 = mat4()
 
 
 
@@ -459,9 +461,15 @@ proc transformation*(glpos: var Vec4, pos: var Vec2, size, px, ipos: Vec2, trans
 
 
 
-proc `viewportMatrix=`*(ctx: DrawContext, mat: Mat4) =
-  ctx.viewportToGlMatrix = mat
-  ctx.glToViewportMatrix = mat.inverse
+proc `viewport=`*(ctx: DrawContext, mat: Mat4) =
+  ctx.viewportMatrix = mat
+  ctx.viewportToGlMatrix = combine(ctx.viewportMatrix, ctx.projectionMatrix)
+  ctx.glToViewportMatrix = inverse(ctx.viewportToGlMatrix)
+
+proc `projection=`*(ctx: DrawContext, mat: Mat4) =
+  ctx.projectionMatrix = mat
+  ctx.viewportToGlMatrix = combine(ctx.viewportMatrix, ctx.projectionMatrix)
+  ctx.glToViewportMatrix = inverse(ctx.viewportToGlMatrix)
 
 
 

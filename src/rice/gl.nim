@@ -185,13 +185,17 @@ proc `uniform=`*(i: GlInt, value: Vec4) =
   if i != -1:
     glUniform4f(i, value.x, value.y, value.z, value.w)
 
+proc `uniform=`*(i: GlInt, value: Mat3) =
+  if i != -1:
+    glUniformMatrix3fv(i, 1, GlFalse, cast[ptr GlFloat](value.unsafeaddr))
+
 proc `uniform=`*(i: GlInt, value: Mat4) =
   if i != -1:
     glUniformMatrix4fv(i, 1, GlFalse, cast[ptr GlFloat](value.unsafeaddr))
 
 
 proc `uniform=`*[T](x: OpenglUniform[T], value: T) =
-  x.GlInt.uniform = value
+  `uniform=`(x.GlInt, value)
 
 
 # -------- Shape --------

@@ -132,7 +132,7 @@ test "graph maker":
 
     let (vw, vh) = (e.window.size.x, e.window.size.y)
 
-    ctx.viewportMatrix = combine(
+    ctx.viewport = combine(
       translate(pos),
       rot,
       scale(vec3(zoom)),
