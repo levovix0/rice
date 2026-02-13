@@ -22,6 +22,7 @@ type
 
   DrawContext* = ref object
     rect*: Shape
+    line*: Shape
 
     shaders*: Table[int, RootRef]
     
@@ -503,6 +504,14 @@ proc newDrawContext*: DrawContext =
       0'u32, 1, 2,
       2, 3, 0,
     ]
+  )
+
+  result.line = newShape(
+    [
+      0'f32,
+      1'f32,
+    ],
+    kind = GL_LINES
   )
 
   result.viewportMatrix = mat4()

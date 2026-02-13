@@ -140,21 +140,10 @@ test "graph maker":
     )
 
     for edge in scene.edges:
-      let d = (scene.nodes[edge.b].pos - scene.nodes[edge.a].pos)
-
-      ctx.fillRect(
-        rect = rect(0, -0.5, 1, 1),
-        color = color(1, 1, 1, 1) * 0.3,
-        transform = combine(
-          scale(vec3(1, 1/200 / zoom, 0)),
-          mat4(
-            d.x, d.y, d.z, 0,
-            0, 1, 0, 0,
-            0, 0, 1, 0,
-            0, 0, 0, 1,
-          ),
-          translate(scene.nodes[edge.a].pos),
-        ),
+      ctx.drawLine(
+        scene.nodes[edge.a].pos,
+        scene.nodes[edge.b].pos,
+        color(1, 1, 1, 1) * 0.3,
       )
     
     for node in scene.nodes:

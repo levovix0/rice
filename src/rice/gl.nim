@@ -243,13 +243,13 @@ proc newShape*[T](vert: openarray[T], kind = GlTriangles): Shape =
     makeAttributes T
 
 
-proc draw*(x: Shape) =
+proc draw*(x: Shape, kind: GLenum = x.kind) =
   assert x.len != 0, "trying to draw empty shape, probably uninitialized"
   withVertexArray x.vao[0]:
     if hasIndices in x.flags:
-      glDrawElements(x.kind, x.len.GlSizei, GlUnsignedInt, nil)
+      glDrawElements(kind, x.len.GlSizei, GlUnsignedInt, nil)
     else:
-      glDrawArrays(x.kind, 0, x.len.GlSizei)
+      glDrawArrays(kind, 0, x.len.GlSizei)
 
 
 
