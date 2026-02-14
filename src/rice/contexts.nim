@@ -1,6 +1,6 @@
-import std/[tables, macros, sequtils]
-import pkg/[shady, pixie]
-import pkg/fusion/[astdsl]
+import std/[tables, macros, sequtils, options, strutils]
+import pkg/[shady, chroma, bumpy]
+import pkg/pixie/[images, fonts]
 import ./[transform, gl, text as renderText]
 
 # todo: remove dependency on fusion
@@ -25,6 +25,7 @@ type
     line*: Shape
 
     shaders*: Table[int, RootRef]
+    # parametrizedShaders*: Table[seq[int], RootRef]
     
     px*: Vec2  ## size of a pixel
     wh*: Vec2  ## size of the drawing area in pixels
@@ -40,6 +41,16 @@ type
     projectionMatrix*: Mat4 = mat4()
     viewportToGlMatrix*: Mat4 = mat4()
     glToViewportMatrix*: Mat4 = mat4()
+  
+
+  ShaderClosure*[Signature] = ref object
+    cpuCallback*: Signature
+    glslCode*: string
+  
+
+  ShaderKind = enum
+    vert
+    frag
 
 
 
@@ -98,85 +109,174 @@ proc fixVmathTypes(n: NimNode): NimNode =
       result[1] = result[1].fixVmathTypes
 
 
+proc tryMangle(n: NimNode): Option[string] =
+  if n.kind in {nnkSym, nnkIdent}: return some(n.strVal)
+  if n.kind in {nnkDotExpr, nnkConv} and n.len == 2:
+    let a = tryMangle(n[0])
+    let b = tryMangle(n[1])
+    if a.isSome and b.isSome:
+      return some(a.get & "_" & b.get)
+  # return none(typeof(result))
+
+
 proc makeShaderViaShady(
   ctx: NimNode,
   version: NimNode,
-  uniforms: Table[string, NimNode],
+  uniforms: Table[string, NimNode],  # name -> type
   id: int,
   vert: NimNode,
   frag: NimNode,
   shaderT: NimNode,
   shaderX: NimNode,
+  replacements: array[ShaderKind, tuple[comptime, runtime: seq[(string, NimNode)]]],
 ): NimNode =
-  result = buildAst(stmtList):
-    vert
-    frag
+  var uniformsNodes: seq[NimNode]
+  for n, t in uniforms:
+    uniformsNodes.add nnkIdentDefs.newTree(
+      ident(n),
+      nnkBracketExpr.newTree(bindSym("OpenglUniform"), t),
+      newEmptyNode()
+    )
 
-    typeSection:
-      typeDef:
-        shaderT
-        empty()
-        refTy:
-          objectTy:
-            empty()
-            ofInherit:
-              bindSym"RootObj"
-            recList:
-              identDefs(ident "shader"):
-                bindSym"Shader"
-                empty()
+  var uniformsNodes2: seq[NimNode]
+  for n, t in uniforms:
+    uniformsNodes2.add nnkAsgn.newTree(
+      nnkDotExpr.newTree(shaderX, ident(n)),
+      nnkCall.newTree(
+        nnkBracketExpr.newTree(bindSym("OpenglUniform"), t),
+        nnkBracketExpr.newTree(
+          nnkDotExpr.newTree(shaderX, ident("shader")),
+          newLit(n)
+        )
+      )
+    )
 
-              for n, t in uniforms:
-                identDefs(ident n):
-                  bracketExpr bindSym"OpenglUniform": t
-                  empty()
+  var shaderCode = [
+    ShaderKind.vert: nnkCall.newTree(
+      bindSym("toGLSL"),
+      vert[0],
+      version
+    ),
+    ShaderKind.frag: nnkCall.newTree(
+      bindSym("toGLSL"),
+      frag[0],
+      version
+    )
+  ]
+
+  for kind, replacements in replacements:
+    if replacements.comptime.len != 0:
+      for (k, v) in replacements.comptime:
+        shaderCode[kind] = newCall(
+          bindSym("replace"),
+          shaderCode[kind],
+          newLit(k),
+          v
+        )
+      shaderCode[kind] = newCall(ident("static"), shaderCode[kind])
+
+    for (k, v) in replacements.runtime:
+      shaderCode[kind] = newCall(
+        bindSym("replace"),
+        shaderCode[kind],
+        newLit(k),
+        v
+      )
+
+
+  result = nnkStmtList.newTree(
+    vert,
+    frag,
+
+    nnkTypeSection.newTree(
+      nnkTypeDef.newTree(
+        shaderT,
+        newEmptyNode(),
+        nnkRefTy.newTree(
+          nnkObjectTy.newTree(
+            newEmptyNode(),
+            nnkOfInherit.newTree(
+              bindSym("RootObj"),
+            ),
+            nnkRecList.newTree(
+              @[
+                nnkIdentDefs.newTree(
+                  ident("shader"),
+                  bindSym("Shader"),
+                  newEmptyNode()
+                )
+              ] & uniformsNodes
+            )
+          )
+        )
+      )
+    ),
+
+    nnkIfExpr.newTree(
+      nnkElifBranch.newTree(
+        nnkCall.newTree(
+          bindSym("not"),
+          nnkCall.newTree(
+            bindSym("hasKey"),
+            nnkDotExpr.newTree(ctx, ident "shaders"),  # todo: use parametrizedShaders instead when has runtime insertions
+            newLit(id),
+          )
+        ),
+        nnkStmtList.newTree(
+          @[
+            nnkLetSection.newTree(
+              nnkIdentDefs.newTree(shaderX, newEmptyNode(), nnkCall.newTree(bindSym("new"), shaderT)),
+            ),
+            
+            nnkAsgn.newTree(
+              nnkDotExpr.newTree(shaderX, ident("shader")),
+              nnkCall.newTree(
+                bindSym("newShader"),
+                nnkTableConstr.newTree(
+                  nnkExprColonExpr.newTree(
+                    ident("GlVertexShader"),
+                    shaderCode[ShaderKind.vert],
+                  ),
+                  nnkExprColonExpr.newTree(
+                    ident("GlFragmentShader"),
+                    shaderCode[ShaderKind.frag],
+                  )
+                )
+              )
+            ),
+          ] & uniformsNodes2 & @[
+            nnkCall.newTree(
+              bindSym("[]="),
+              nnkDotExpr.newTree(ctx, ident("shaders")),
+              newLit(id),
+              nnkCall.newTree(bindSym("RootRef"), shaderX),
+            ),
+          ]
+        )
+      )
+    ),
     
-    ifExpr:
-      elifBranch:
-        call bindSym"not":
-          call bindSym"hasKey":
-            dotExpr(ctx, ident "shaders")
-            newLit id
-        stmtList:
-          letSection:
-            identDefs(shaderX, empty(), call(bindSym"new", shaderT))
-          
-          asgn dotExpr(shaderX, ident"shader"):
-            call bindSym"newShader":
-              tableConstr:
-                exprColonExpr:
-                  ident "GlVertexShader"
-                  call bindSym"toGLSL":
-                    vert[0]
-                    version
-                exprColonExpr:
-                  ident "GlFragmentShader"
-                  call bindSym"toGLSL":
-                    frag[0]
-                    version
-          
-          for n, t in uniforms:
-            asgn dotExpr(shaderX, ident n):
-              call bracketExpr(bindSym"OpenglUniform", t):
-                bracketExpr:
-                  dotExpr(shaderX, ident "shader")
-                  newLit n
-          
-          call bindSym"[]=":
-            dotExpr(ctx, ident "shaders")
-            newLit id
-            call bindSym"RootRef": shaderX
-    
-    call shaderT: call(bindSym"[]", dotExpr(ctx, ident "shaders"), newLit id)
+    nnkCall.newTree(
+      shaderT,
+      nnkCall.newTree(bindSym"[]", nnkDotExpr.newTree(ctx, ident("shaders")), newLit(id)),
+    )
+  )
 
 
-macro makeShaderImpl(ctx: DrawContext, body: untyped, uniforms: typed): auto =
+macro makeShaderImpl(
+  ctx: DrawContext,
+  body: untyped,
+  uniforms: typed,
+  comptimeInsertions: typed,
+  comptimeInsertionTypes: untyped,
+  runtimeInsertions: typed,
+  runtimeInsertionTypes: untyped,
+): auto =
+  result = newStmtList()
+
   let id = newShaderId
   inc newShaderId
-  type
-    ShaderKind = enum
-      vert
-      frag
+
   var
     bodies: array[ShaderKind, NimNode] = [newStmtList(), newStmtList()]
     params: array[ShaderKind, seq[NimNode]]
@@ -188,9 +288,50 @@ macro makeShaderImpl(ctx: DrawContext, body: untyped, uniforms: typed): auto =
   var body = body
   if body.kind != nnkStmtList:
     body = newStmtList(body)
+
+  var
+    comptimeInsertionsDecl: seq[NimNode]
+    runtimeInsertionsDecl: seq[NimNode]
+    comptimeInsertionStubs: seq[NimNode]
+    runtimeInsertionStubs: seq[NimNode]
+
+  for i, x in comptimeInsertions:
+    comptimeInsertionsDecl.add nnkConstDef.newTree(
+      nskConst.genSym("comptimeInsertion"),
+      newEmptyNode(),
+      nnkPrefix.newTree(ident("$"), x)
+    )
+    comptimeInsertionStubs.add nnkIdentDefs.newTree(
+      nskLet.genSym("comptimeInsertion_" & $i & "_stub"),
+      newEmptyNode(),
+      newCall(bindSym("default"), comptimeInsertionTypes[i])
+    )
+
+  for i, x in runtimeInsertions:
+    runtimeInsertionsDecl.add nnkIdentDefs.newTree(
+      nskLet.genSym("runtimeInsertion"),
+      newEmptyNode(),
+      nnkPrefix.newTree(ident("$"), x)
+    )
+    runtimeInsertionStubs.add nnkIdentDefs.newTree(
+      nskLet.genSym("comptimeInsertion_" & $i & "_stub"),
+      newEmptyNode(),
+      newCall(bindSym("default"), runtimeInsertionTypes[i])
+    )
+
+  var replacements: array[ShaderKind, tuple[comptime, runtime: seq[(string, NimNode)]]]
   
   template subTraverse(body: NimNode, outBody: var NimNode) {.dirty.} =
-    traverse body, outBody, kind, uniforms, uniformsTable, uniformsInitTable, params
+    traverse(
+      body, outBody, kind,
+      uniforms, uniformsTable, uniformsInitTable,
+      params,
+      comptimeInsertions, comptimeInsertionTypes,
+      runtimeInsertions, runtimeInsertionTypes,
+      comptimeInsertionsDecl, runtimeInsertionsDecl,
+      comptimeInsertionStubs, runtimeInsertionStubs,
+      replacements,
+    )
 
   template subTraverseParams(body: NimNode) {.dirty.} =
     traverseParams body, kind, uniformsTable, params
@@ -200,9 +341,18 @@ macro makeShaderImpl(ctx: DrawContext, body: untyped, uniforms: typed): auto =
     outBody: var NimNode,
     kind: ShaderKind,
     uniforms: NimNode,
-    uniformsTable: var Table[string, NimNode],
-    uniformsInitTable: var Table[string, NimNode],
+    uniformsTable: var Table[string, NimNode],  # name -> type
+    uniformsInitTable: var Table[string, NimNode],  # name -> init value
     params: var array[ShaderKind, seq[NimNode]],
+    comptimeInsertions: NimNode,
+    comptimeInsertionTypes: NimNode,
+    runtimeInsertions: NimNode,
+    runtimeInsertionTypes: NimNode,
+    comptimeInsertionsDecl: seq[NimNode],
+    runtimeInsertionsDecl: seq[NimNode],
+    comptimeInsertionStubs: seq[NimNode],
+    runtimeInsertionStubs: seq[NimNode],
+    replacements: var array[ShaderKind, tuple[comptime, runtime: seq[(string, NimNode)]]]
   ) =
 
     # @uniformIdx
@@ -210,8 +360,7 @@ macro makeShaderImpl(ctx: DrawContext, body: untyped, uniforms: typed): auto =
       let uniformIdx = body[1].intVal
       let typedUniform = uniforms[uniformIdx]
       
-      let name = (if typedUniform.kind in {nnkSym, nnkIdent}: "u_" & typedUniform.strVal else: "uniform_" & $uniformIdx)
-      # todo: deduce name for uniforms like `this.my.x` as "this_my_x"
+      let name = (let n = typedUniform.tryMangle; if n.isSome: "u_" & n.get else: "uniform_" & $uniformIdx)
       uniformsTable[name] = typedUniform.getTypeInst.fixVmathTypes
       uniformsInitTable[name] = typedUniform
       
@@ -225,7 +374,22 @@ macro makeShaderImpl(ctx: DrawContext, body: untyped, uniforms: typed): auto =
       )
       if inst notin params[kind]: params[kind].add inst
       outBody.add nameIdent
-      
+
+    # typIdx@!exprIdx
+    elif body.kind == nnkInfix and body.len == 3 and body[0] == ident("@!") and body[2].kind == nnkIntLit:
+      outBody.add comptimeInsertionStubs[body[2].intVal][0]
+      replacements[kind].comptime.add (
+        comptimeInsertionStubs[body[2].intVal][0].strVal,
+        comptimeInsertionsDecl[body[2].intVal][0]
+      )
+
+    # typIdx@?exprIdx
+    elif body.kind == nnkInfix and body.len == 3 and body[0] == ident("@?") and body[2].kind == nnkIntLit:
+      outBody.add runtimeInsertionStubs[body[2].intVal][0]
+      replacements[kind].runtime.add (
+        runtimeInsertionStubs[body[2].intVal][0].strVal,
+        runtimeInsertionsDecl[body[2].intVal][0]
+      )
     
     # var name {.inp.}: Typ
     elif body.kind == nnkVarSection:
@@ -330,10 +494,21 @@ macro makeShaderImpl(ctx: DrawContext, body: untyped, uniforms: typed): auto =
 
   let shaderT = nskType.genSym("ShaderT")
 
-  result = makeShaderViaShady(
+  let vertProcname = nskProc.genSym("vert")
+  let fragProcname = nskProc.genSym("frag")
+
+  if comptimeInsertionsDecl.len != 0:
+    result.add nnkConstSection.newTree(comptimeInsertionsDecl)
+    result.add nnkLetSection.newTree(comptimeInsertionStubs)
+
+  if runtimeInsertionsDecl.len != 0:
+    result.add nnkLetSection.newTree(runtimeInsertionsDecl)
+    result.add nnkLetSection.newTree(runtimeInsertionStubs)
+
+  result.add makeShaderViaShady(
     ctx, version, uniformsTable, id,
     nnkProcDef.newTree(
-      nskProc.genSym("vert"),
+      vertProcname,
       newEmptyNode(),
       newEmptyNode(),
       nnkFormalParams.newTree(
@@ -344,7 +519,7 @@ macro makeShaderImpl(ctx: DrawContext, body: untyped, uniforms: typed): auto =
       bodies[vert]
     ),
     nnkProcDef.newTree(
-      nskProc.genSym("frag"),
+      fragProcname,
       newEmptyNode(),
       newEmptyNode(),
       nnkFormalParams.newTree(
@@ -356,7 +531,9 @@ macro makeShaderImpl(ctx: DrawContext, body: untyped, uniforms: typed): auto =
     ),
     shaderT,
     nskLet.genSym("shaderX"),
-  )
+    replacements,
+  )[0..^1]
+
 
   var useAndPassUniformsBody = newStmtList()
   useAndPassUniformsBody.add nnkCall.newTree(
@@ -397,21 +574,60 @@ macro makeShaderImpl(ctx: DrawContext, body: untyped, uniforms: typed): auto =
     newEmptyNode(),
     useAndPassUniformsBody,
   )
+  
+  when defined(rice_debugShaders):
+    let lineInfo = $body.lineInfo
+    result.insert result.len - 1, quote do:
+      static:
+        echo "vert shader defined at ", `lineInfo`
+        echo toGLSL(`vertProcname`, `version`)
+        echo "frag shader defined at ", `lineInfo`
+        echo toGLSL(`fragProcname`, `version`)
 
 
 macro makeShader*(ctx: DrawContext, body: untyped): auto =
   var uniforms = nnkTupleConstr.newTree()
+  var comptimeInsertions = nnkTupleConstr.newTree()
+  var comptimeInsertionTypes = nnkTupleConstr.newTree()
+  var runtimeInsertions = nnkTupleConstr.newTree()
+  var runtimeInsertionTypes = nnkTupleConstr.newTree()
 
   proc traverse(body: NimNode, uniforms: var NimNode) =
     # @(expr)
     if body.kind == nnkPrefix and body.len == 2 and body[0] == ident("@") and body[1].kind == nnkPar:
-      # pass @(expr) to next macros as typed expr
+      # pass `@(0)` in body and typed `expr` to next macros
       var i = uniforms.find(body[1])
       if i == -1:
         uniforms.add body[1]
         i = uniforms.len - 1
       let initExpr = body[1]
       body[1] = newLit(i)
+      body[1].copyLineInfo(initExpr)
+
+    # typ@!(expr)
+    elif body.kind == nnkInfix and body.len == 3 and body[0] == ident("@!") and body[2].kind == nnkPar:
+      # pass `0@!(0)` in body, untyped `typ` and typed `expr` to next macros
+      var i = comptimeInsertions.find(body[1])
+      if i == -1:
+        comptimeInsertions.add body[2]
+        comptimeInsertionTypes.add body[1]
+        i = comptimeInsertions.len - 1
+      let initExpr = body[1]
+      body[1] = newLit(i)
+      body[2] = newLit(i)
+      body[1].copyLineInfo(initExpr)
+
+    # @?(expr)
+    elif body.kind == nnkInfix and body.len == 3 and body[0] == ident("@?") and body[2].kind == nnkPar:
+      # pass `0@?(0)` in body, untyped `typ` and typed `expr` to next macros
+      var i = runtimeInsertions.find(body[1])
+      if i == -1:
+        runtimeInsertions.add body[2]
+        runtimeInsertionTypes.add body[1]
+        i = runtimeInsertions.len - 1
+      let initExpr = body[1]
+      body[1] = newLit(i)
+      body[2] = newLit(i)
       body[1].copyLineInfo(initExpr)
     
     if body.len != 0:
@@ -424,6 +640,10 @@ macro makeShader*(ctx: DrawContext, body: untyped): auto =
     ctx,
     body,
     uniforms,
+    comptimeInsertions,
+    comptimeInsertionTypes,
+    runtimeInsertions,
+    runtimeInsertionTypes,
   )
 
 
@@ -586,3 +806,75 @@ proc drawText*(ctx: DrawContext, pos: Vec3, arrangement: Arrangement, color: Vec
   
   glBindTexture(GlTexture2d, 0)
   glDisable(GlBlend)
+
+
+
+# =======================
+# --- Shader closures ---
+# =======================
+
+macro makeShaderClosure*[T: proc](body: T): ShaderClosure[T] =
+  ## todo
+  quote do: ShaderClosure[proc()]()
+
+
+
+when isMainModule:
+  import pkg/[siwin]
+
+  let win = newOpenglWindow()
+  opengl.loadExtensions()
+  let ctx = newDrawContext()
+
+  # todo:
+  # let colorizer = makeShaderClosure proc(t: float32): Vec4 =
+  #   mix(vec4(1, 0, 0, 1), vec4(0, 1, 0, 1), t)
+
+  # let sinSampler = makeShaderClosure proc(t: float32): Vec4 =
+  #   vec4(t, sin(t * @!(PI)), 0, 1)
+
+  # todo:
+  # let colorizer = """
+  #   vec4 colorize(t: float32) {
+  #     return mix(vec4(1, 0, 0, 1), vec4(0, 1, 0, 1), t);
+  #   }
+  # """
+
+  win.eventsHandler.onRender = proc(e: RenderEvent) =
+    glClearColor(0.1, 0.1, 0.1, 1)
+    glClear(GL_COLOR_BUFFER_BIT)
+    glViewport(0, 0, e.window.size.x, e.window.size.y)
+
+    let numPoints = e.window.size.x
+    
+    # todo:
+    # let shader = ctx.makeShader:
+    #   proc vert =
+    #     gl_Position = `proc@?`(sinSampler)(gl_VertexID.float32 / @(numPoints.float32))
+    #
+    #   proc frag =
+    #     var glCol {.outGl.}: Vec4
+    #
+    #     glCol = `proc@?`(colorizer)(t)
+
+    let shader = ctx.makeShader:
+      proc vert =
+        var t {.out.}: float32
+
+        t = gl_VertexID.float32 / @(numPoints.float32)
+        gl_Position = vec4(t * 2 - 1, sin(t * 2 * PI), 0, 1)
+    
+      proc frag =
+        var glCol {.outGl.}: Vec4
+    
+        # todo:
+        # `outside@?`(colorizer)
+        # glCol = Vec4@!("colorizer(t)")
+        
+        glCol = vec4(float32@!("atan(t, 1.0 - t)"), 0, 0, 1)
+    
+    useAndPassUniforms shader
+    glDrawArrays(GL_LINE_STRIP, 0, numPoints)
+
+  run win
+

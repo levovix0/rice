@@ -14,7 +14,6 @@ proc fillRect*(ctx: DrawContext, rect: Rect, color: Color, transform: Mat4 = mat
   let shader = ctx.makeShader:
     proc vert =
       var ipos {.inp.}: Vec2
-      var gl_Position {.outGl.}: Vec4
 
       gl_Position = @(transform) * vec4(ipos.xy, vec2(0, 1))
     
@@ -45,7 +44,6 @@ proc drawLine*(ctx: DrawContext, a, b: Vec3, color: Color, transform: Mat4 = mat
   let shader = ctx.makeShader:
     proc vert =
       var t {.inp.}: float32
-      var gl_Position {.outGl.}: Vec4
 
       gl_Position = @(transform) * vec4(t, 0, 0, 1)
     
@@ -68,9 +66,8 @@ when isMainModule:
   import std/[times]
   import pkg/[siwin]
 
-  let win = newSiwinGlobals().newOpenglWindow()
-  
-  loadExtensions()
+  let win = newOpenglWindow()
+  opengl.loadExtensions()
   let ctx = newDrawContext()
 
   var time = 0'f32

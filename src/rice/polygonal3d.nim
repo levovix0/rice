@@ -17,7 +17,6 @@ proc draw3dShapeFlat*(
   let shader = ctx.makeShader:
     proc vert =
       var inPos {.inp.}: Vec3
-      var gl_Position {.outGl.}: Vec4
 
       gl_Position = @(transform) * vec4(inPos, 1)
     

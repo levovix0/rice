@@ -11,7 +11,6 @@ requires "vmath"   # for vectors
 requires "opengl"  # for opengl functions
 requires "shady"   # for writing shaders in nim
 requires "pixie"   # for fonts and paths
-requires "fusion"  # for astdsl (todo: remove)
 
 requires "siwin"   # for tests (todo: remove)
 
