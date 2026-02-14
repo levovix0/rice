@@ -745,11 +745,11 @@ proc updateDrawingAreaSize*(ctx: DrawContext, size: IVec2) =
 
 
 
-proc drawText*(ctx: DrawContext, pos: Vec3, arrangement: Arrangement, color: Vec4, origin: Vec2 = vec2(0.5, 0.5)) =
+proc drawText*(ctx: DrawContext, pos: Vec3, arrangement: Arrangement, color: Vec4, origin: Vec2 = vec2(0.5, 0.5), transform = mat4()) =
   if arrangement == nil or arrangement.fonts.len == 0:
     return
 
-  let pos = ctx.viewportToGlMatrix * pos
+  let pos = ctx.viewportToGlMatrix * transform * pos
 
   let shader = ctx.makeShader:
     proc vert(transform: Uniform[Vec4], placement: Uniform[Vec4]) =

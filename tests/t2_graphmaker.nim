@@ -25,6 +25,8 @@ test "graph maker":
 
   let font = staticRead("data/Roboto-regular.ttf").static.parseTtf().newFont
   font.size = 12
+  var font2 = font.typeface.newFont
+  font2.size = 18
 
   # const angleRand = 0.float32
   const angleRand = (Pi / 16).float32
@@ -165,6 +167,17 @@ test "graph maker":
         origin = vec2(0.5, -0.2),
       )
       glEnable(GL_DEPTH_TEST)
+
+
+    glDisable(GL_DEPTH_TEST)
+    ctx.drawText(
+      pos = vec3(0, -1, 0),
+      arrangement = typeset(font2, "hold `space` to advance simulation"),
+      color = color(0.5, 0.5, 0.5, 1).vec4,
+      origin = vec2(0.5, 2),
+      transform = ctx.glToViewportMatrix,
+    )
+    glEnable(GL_DEPTH_TEST)
   
 
   win.eventsHandler.onResize = proc(e: ResizeEvent) =
