@@ -2,18 +2,26 @@ import ./[gl]
 
 
 type
+  OpenglVersion* = enum
+    opengl_es3
+    opengl3
+    opengl4
+
   AntialiasedFramebuffer* = object
     fbo*: Framebuffers
     col*: Texture
     depth*: Texture
     size*: IVec2
+    version*: OpenglVersion
 
 
-proc newAntialiasedFramebuffer*(depth = false): AntialiasedFramebuffer =
+proc newAntialiasedFramebuffer*(depth = false, version = OpenglVersion.low): AntialiasedFramebuffer =
   result.fbo = newFrameBuffers(1)
-  result.col = newTexture()
+  result.version = version
+  
+  result.col = if result.version != opengl_es3: newTexture() else: Texture()
   if depth:
-    result.depth = newTexture()
+    result.depth = if result.version != opengl_es3: newTexture() else: Texture()
 
 
 proc hasDepth*(this: AntialiasedFramebuffer): bool =
@@ -24,13 +32,25 @@ proc resize*(this: var AntialiasedFramebuffer, size: IVec2) =
   if this.size == size: return
   this.size = size
 
+  if this.version == opengl_es3:
+    this.col = newTexture(forceNew = true)
+
   glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, this.col.raw)
-  glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_RGBA.GlInt, size.x.GlInt, size.y.GlInt, GL_TRUE)
+  if this.version == opengl3:
+    glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_RGBA.GlInt, size.x.GlInt, size.y.GlInt, GL_TRUE)
+  else:
+    glTexStorage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_RGBA8, size.x.GlInt, size.y.GlInt, GL_TRUE)
   glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0)
 
   if this.hasDepth:
+    if this.version == opengl_es3:
+      this.depth = newTexture(forceNew = true)
+
     glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, this.depth.raw)
-    glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_DEPTH_COMPONENT.GlInt, size.x.GlInt, size.y.GlInt, GL_TRUE)
+    if this.version == opengl3:
+      glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_DEPTH_COMPONENT.GlInt, size.x.GlInt, size.y.GlInt, GL_TRUE)
+    else:
+      glTexStorage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_DEPTH_COMPONENT32F, size.x.GlInt, size.y.GlInt, GL_TRUE)
     glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0)
 
   glBindFramebuffer(GL_FRAMEBUFFER, this.fbo[0])
@@ -42,14 +62,14 @@ proc resize*(this: var AntialiasedFramebuffer, size: IVec2) =
 proc startDraw*(this: AntialiasedFramebuffer) =
   glBindFramebuffer(GL_FRAMEBUFFER, this.fbo[0])
 
-  glEnable(GL_MULTISAMPLE)
+  if this.version == opengl3: glEnable(GL_MULTISAMPLE)
   if this.hasDepth: glEnable(GL_DEPTH_TEST)
 
 
 proc endDraw*(this: AntialiasedFramebuffer, nextFbo: GlUint) =
   glBindFramebuffer(GL_FRAMEBUFFER, nextFbo)
 
-  glDisable(GL_MULTISAMPLE)
+  if this.version == opengl3: glDisable(GL_MULTISAMPLE)
   if this.hasDepth: glDisable(GL_DEPTH_TEST)
 
 
@@ -95,7 +115,7 @@ when isMainModule:
     ctx.fillRect(
       rect,
       color(1, 0.2, 0.2),
-      rotateZ(origin = vec3(rect.xy + rect.wh/2, 0), time / 4),
+      rotateZ(time / 4, origin = vec3(rect.xy + rect.wh/2, 0)),
     )
 
     endDraw aafb, 0  #! <----

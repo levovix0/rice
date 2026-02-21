@@ -258,18 +258,32 @@ proc draw*(x: Shape, kind: GLenum = x.kind) =
 const rice_render_texturesToAllocateIfNoFree {.intdefine.} = 8
 
 proc `=destroy`(texture: TextureObj) =
-  freeTextures.incl texture.glid
-  try:
-    texture.glid.loadTexture(pixie.newImage(1, 1))  # load empty image to force opengl use less memory
-  except GlError, PixieError:
-    discard
+  if freeTextures.len < rice_render_texturesToAllocateIfNoFree:
+    freeTextures.incl texture.glid
+    try:
+      texture.glid.loadTexture(pixie.newImage(1, 1))  # load empty image to force opengl use less memory
+    except GlError, PixieError:
+      discard
+  
+  else:
+    try:
+      glDeleteTextures(1, texture.glid.addr)
+    except GlError:
+      discard
 
 
 proc raw*(texture: Texture): GlUint =
   texture.glid
 
 
-proc newTexture*(): Texture =
+proc newTexture*(forceNew = false): Texture =
+  if forceNew:
+    var newTextureGlId: GlUint
+    glGenTextures(1, newTextureGlId.addr)
+    new result
+    result.glid = newTextureGlId
+    return
+  
   if freeTextures.len == 0:
     var newTextureGlUids: array[rice_render_texturesToAllocateIfNoFree, GlUint]
     glGenTextures(rice_render_texturesToAllocateIfNoFree, newTextureGlUids[0].addr)
