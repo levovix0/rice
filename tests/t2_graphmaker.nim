@@ -99,7 +99,7 @@ test "graph maker":
       relaxEdges(edge, scene.nodes, dt, targetLen)
 
 
-  let win = newSiwinGlobals(preferedPlatform=x11).newOpenglWindow()
+  let win = newOpenglWindow()
   loadExtensions()
   
   let ctx = newDrawContext()
@@ -129,7 +129,7 @@ test "graph maker":
 
   proc render(e: RenderEvent) =
     glClearColor(0.1, 0.1, 0.1, 1)
-    glClearDepth(1.0)
+    glClearDepthf(1.0)
     glClear(GL_COLOR_BUFFER_BIT or GL_DEPTH_BUFFER_BIT)
 
     let (vw, vh) = (e.window.size.x, e.window.size.y)
@@ -187,11 +187,6 @@ test "graph maker":
 
   win.eventsHandler.onRender = proc(e: RenderEvent) =
     ctx.drawInside aafb: render(e)
-
-
-  var mpos = vec2()
-  win.eventsHandler.onMouseButton = proc(e: MouseButtonEvent) =
-    mpos = e.window.mouse.pos
 
 
   addCameraMovement(win, pos, rot, zoom)

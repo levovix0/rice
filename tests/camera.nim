@@ -2,6 +2,10 @@ import pkg/[siwin, vmath]
 
 
 template addCameraMovement*(win: Window, pos: var Vec3, rot: var Mat4, zoom: var float32) =
+  var mpos = vec2()
+  win.eventsHandler.onMouseButton = proc(e: MouseButtonEvent) =
+    mpos = e.window.mouse.pos
+
   win.eventsHandler.onMouseMove = proc(e: MouseMoveEvent) =
     let d = e.window.mouse.pos - mpos
     let dn = d / vec2(
@@ -43,3 +47,4 @@ template addCameraMovement*(win: Window, pos: var Vec3, rot: var Mat4, zoom: var
     
     pos = pos - rot.inverse * vec3(-dn.x, dn.y, 0)
     redraw win
+

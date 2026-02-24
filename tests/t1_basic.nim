@@ -5,7 +5,7 @@ import ./camera
 
 
 test "basic":
-  let win = newSiwinGlobals(preferedPlatform=x11).newOpenglWindow()
+  let win = newOpenglWindow()
   loadExtensions()
   
   let ctx = newDrawContext()
@@ -23,7 +23,7 @@ test "basic":
 
   proc render(e: RenderEvent) =
     glClearColor(0.1, 0.1, 0.1, 1)
-    glClearDepth(1.0)
+    glClearDepthf(1.0)
     glClear(GL_COLOR_BUFFER_BIT or GL_DEPTH_BUFFER_BIT)
 
     let (vw, vh) = (e.window.size.x, e.window.size.y)

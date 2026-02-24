@@ -9,3 +9,6 @@ export
   gl, contexts, contextutils, antialiasing,
   text, primitives, polygonal3d,
   fileformats
+
+import pkg/[chroma, opengl]
+export chroma, opengl
