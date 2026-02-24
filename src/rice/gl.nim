@@ -41,11 +41,11 @@ type
     hasIndices
   
   Shape* = object
-    kind: GlEnum
-    len: int
-    vao: VertexArrays
-    bo: Buffers
-    flags: set[ShapeFlag]
+    kind*: GlEnum
+    len*: int
+    vao*: VertexArrays
+    bo*: Buffers
+    flags*: set[ShapeFlag]
 
 
   OpenglUniform*[T] = distinct GlInt

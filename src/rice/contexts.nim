@@ -3,6 +3,8 @@ import pkg/[shady, chroma, bumpy]
 import pkg/pixie/[images, fonts]
 import ./[transform, gl, text as renderText]
 
+export shady.gl_Position, shady.gl_VertexID
+
 # todo: remove dependency on fusion
 
 
@@ -21,6 +23,7 @@ type
 
 
   DrawContext* = ref object
+    emptyVao*: VertexArrays
     rect*: Shape
     line*: Shape
 
@@ -711,8 +714,14 @@ proc glNormalizedToWindowMatrix*(ctx: DrawContext): Mat4 =
   )
 
 
+proc emptyShape*(ctx: DrawContext, kind: GlEnum, vertexCount: int): Shape =
+  Shape(vao: ctx.emptyVao, kind: kind, len: vertexCount)
+
+
 proc newDrawContext*: DrawContext =
   new result
+
+  result.emptyVao = newVertexArrays(1)
 
   result.rect = newShape(
     [

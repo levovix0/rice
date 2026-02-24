@@ -2,6 +2,11 @@ import pkg/[bumpy, chroma, vmath, shady]
 import ./[gl, transform, contexts, contextutils]
 
 
+var
+  # opengl global variable gl_VertexID, declared as wrong type in shady
+  # todo: make a PR
+  gl_VertexID: int32
+
 
 proc fillRect*(ctx: DrawContext, rect: Rect, color: Color, transform: Mat4 = mat4()) =
   let transform = combine(
@@ -59,6 +64,39 @@ proc drawLine*(ctx: DrawContext, a, b: Vec3, color: Color, transform: Mat4 = mat
 
 proc drawLine*(ctx: DrawContext, a, b: Vec2, color: Color, transform: Mat4 = mat4()) =
   drawLine(ctx, vec3(a.x, a.y, 0), vec3(b.x, b.y, 0), color, transform)
+
+
+proc fillCircle*(
+  ctx: DrawContext,
+  radius: float32,
+  color: Color,
+  center: Vec3 = vec3(),
+  normal: Vec3 = vec3(0, 0, 1),
+  transform: Mat4 = mat4(),
+  pointCount: int = 32,
+) =
+  let centerTransform = combine(
+    translate center,
+    transform,
+    ctx.viewportToGlMatrix,
+  )
+  let normalTransform = transform.mat3 * ctx.viewportToGlMatrix.mat3 * normal.toAngles.fromAngles.mat3
+
+  let shader = ctx.makeShader:
+    proc vert =
+      let pos =
+        if gl_VertexID == 0: vec2(0, 0)
+        else: vec2(@(radius), 0).rotate((gl_VertexID - 1).float32 * (PI * 2) / @(pointCount.float32))
+      let center = @(centerTransform) * vec4(0, 0, 0, 1)
+      gl_Position = center + vec4(@(normalTransform) * vec3(pos.x, pos.y, 0), 0)
+
+    proc frag =
+      var glCol {.outGl.}: Vec4
+      
+      glCol = @(color.vec4)
+  
+  useAndPassUniforms shader
+  draw ctx.emptyShape(GL_TRIANGLE_FAN, pointCount + 2)
 
 
 

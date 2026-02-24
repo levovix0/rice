@@ -67,3 +67,8 @@ proc vec2*(v: Vec4): Vec2 =
 
 proc vec3*(v: Vec2): Vec3 =
   vec3(v.x, v.y, 0)
+
+
+
+proc rotate*(v: Vec2, angle_rad: float32): Vec2 =
+  v * cos(angle_rad) + vec2(-v.y, v.x) * sin(angle_rad)

@@ -36,6 +36,14 @@ proc pop_blendRgbx*(ctx: DrawContext) =
   glDisable(GlBlend)
 
 
+proc push_depthTest*(ctx: DrawContext) =
+  glEnable(GlDepthTest)
+  glBlendFuncSeparate(GlOne, GlOneMinusSrcAlpha, GlOne, GlOne)
+
+proc pop_depthTest*(ctx: DrawContext) =
+  glDisable(GlDepthTest)
+
+
 when false:  # never used
   proc push_multisampling*(ctx: DrawContext) =
     glEnable(GlMultisample)
@@ -83,4 +91,9 @@ template withFaceCulling*(ctx: DrawContext, faceToKeep, body: untyped) =
 
 template withFaceCulling*(ctx: DrawContext, body: untyped) =
   withFaceCulling(ctx, FaceOrientation.front, WindingOrder.ccw, body)
+
+
+template set*(ctx: DrawContext, flag_name: untyped) =
+  `push flag_name`(ctx)
+  defer: `pop flag_name`(ctx)
 
