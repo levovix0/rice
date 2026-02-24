@@ -99,6 +99,39 @@ proc fillCircle*(
   draw ctx.emptyShape(GL_TRIANGLE_FAN, pointCount + 2)
 
 
+proc drawCircle*(
+  ctx: DrawContext,
+  radius: float32,
+  color: Color,
+  center: Vec3 = vec3(),
+  normal: Vec3 = vec3(0, 0, 1),
+  transform: Mat4 = mat4(),
+  pointCount: int = 32,
+) =
+  let centerTransform = combine(
+    translate center,
+    transform,
+    ctx.viewportToGlMatrix,
+  )
+  let normalTransform = transform.mat3 * ctx.viewportToGlMatrix.mat3 * normal.toAngles.fromAngles.mat3
+
+  let shader = ctx.makeShader:
+    proc vert =
+      let pos = vec2(@(radius), 0).rotate(gl_VertexID.float32 * (PI * 2) / @(pointCount.float32))
+      let center = @(centerTransform) * vec4(0, 0, 0, 1)
+      gl_Position = center + vec4(@(normalTransform) * vec3(pos.x, pos.y, 0), 0)
+
+    proc frag =
+      var glCol {.outGl.}: Vec4
+      
+      glCol = @(color.vec4)
+  
+  useAndPassUniforms shader
+  draw ctx.emptyShape(GL_LINE_LOOP, pointCount)
+
+
+# todo: drawCircle (and drawLine) with thickness
+
 
 when isMainModule:
   import std/[times]
