@@ -96,7 +96,7 @@ proc fillCircle*(
       glCol = @(color.vec4)
   
   useAndPassUniforms shader
-  draw ctx.emptyShape(GL_TRIANGLE_FAN, pointCount + 2)
+  draw ctx.emptyMesh(GL_TRIANGLE_FAN, pointCount + 2)
 
 
 proc drawCircle*(
@@ -127,7 +127,7 @@ proc drawCircle*(
       glCol = @(color.vec4)
   
   useAndPassUniforms shader
-  draw ctx.emptyShape(GL_LINE_LOOP, pointCount)
+  draw ctx.emptyMesh(GL_LINE_LOOP, pointCount)
 
 
 # todo: drawCircle (and drawLine) with thickness

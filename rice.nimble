@@ -9,6 +9,6 @@ requires "nim >= 2.2.4"
 requires "chroma"  # for colors
 requires "vmath"   # for vectors
 requires "opengl"  # for opengl functions
-requires "shady"   # for writing shaders in nim
+requires "shady == 0.1.4"   # for writing shaders in nim
 requires "pixie"   # for fonts and paths
 

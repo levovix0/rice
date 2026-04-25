@@ -22,8 +22,8 @@ type
 
   DrawContext* = ref object
     emptyVao*: VertexArrays
-    rect*: Shape
-    line*: Shape
+    rect*: Mesh
+    line*: Mesh
 
     shaders*: Table[int, RootRef]
     # parametrizedShaders*: Table[seq[int], RootRef]
@@ -712,8 +712,8 @@ proc glNormalizedToWindowMatrix*(ctx: DrawContext): Mat4 =
   )
 
 
-proc emptyShape*(ctx: DrawContext, kind: GlEnum, vertexCount: int): Shape =
-  Shape(vao: ctx.emptyVao, kind: kind, len: vertexCount)
+proc emptyMesh*(ctx: DrawContext, kind: GlEnum, vertexCount: int): Mesh =
+  Mesh(vao: ctx.emptyVao, kind: kind, len: vertexCount)
 
 
 proc newDrawContext*: DrawContext =
@@ -721,7 +721,7 @@ proc newDrawContext*: DrawContext =
 
   result.emptyVao = newVertexArrays(1)
 
-  result.rect = newShape(
+  result.rect = newMesh(
     [
       vec2(0, 1),   # top left
       vec2(0, 0),   # bottom left
@@ -733,7 +733,7 @@ proc newDrawContext*: DrawContext =
     ]
   )
 
-  result.line = newShape(
+  result.line = newMesh(
     [
       0'f32,
       1'f32,

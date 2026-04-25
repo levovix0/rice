@@ -18,7 +18,7 @@ test "basic":
   var to_display = 0
 
 
-  let lever_mechanism = staticRead("data/lever_mechanism.stl").static.parseStlAscii(Shape)
+  let lever_mechanism = staticRead("data/lever_mechanism.stl").static.parseStlAscii(Mesh)
 
 
   proc render(e: RenderEvent) =

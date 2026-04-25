@@ -37,15 +37,15 @@ type
   ShaderCompileDefect* = object of Defect
 
 
-  ShapeFlag = enum
+  MeshFlag = enum
     hasIndices
   
-  Shape* = object
+  Mesh* = object
     kind*: GlEnum
     len*: int
     vao*: VertexArrays
     bo*: Buffers
-    flags*: set[ShapeFlag]
+    flags*: set[MeshFlag]
 
 
   OpenglUniform*[T] = distinct GlInt
@@ -198,7 +198,7 @@ proc `uniform=`*[T](x: OpenglUniform[T], value: T) =
   `uniform=`(x.GlInt, value)
 
 
-# -------- Shape --------
+# -------- Mesh --------
 proc makeAttributes(t: type) =
   when t is tuple:
     var i = 0
@@ -215,12 +215,12 @@ proc makeAttributes(t: type) =
     glEnableVertexAttribArray 0
 
 
-proc newShape*[T](vert: openarray[T], idx: openarray[GlUint], kind = GlTriangles): Shape =
+proc newMesh*[T](vert: openarray[T], idx: openarray[GlUint], kind = GlTriangles): Mesh =
   result.vao = newVertexArrays(1)
   result.bo = newBuffers(2)
   result.len = idx.len
   result.kind = kind
-  result.flags = {ShapeFlag.hasIndices}
+  result.flags = {MeshFlag.hasIndices}
 
   withVertexArray result.vao[0]:
     glBindBuffer GlArrayBuffer, result.bo[0]
@@ -230,7 +230,7 @@ proc newShape*[T](vert: openarray[T], idx: openarray[GlUint], kind = GlTriangles
     makeAttributes T
 
 
-proc newShape*[T](vert: openarray[T], kind = GlTriangles): Shape =
+proc newMesh*[T](vert: openarray[T], kind = GlTriangles): Mesh =
   result.vao = newVertexArrays(1)
   result.bo = newBuffers(1)
   result.len = vert.len
@@ -243,8 +243,8 @@ proc newShape*[T](vert: openarray[T], kind = GlTriangles): Shape =
     makeAttributes T
 
 
-proc draw*(x: Shape, kind: GLenum = x.kind) =
-  assert x.len != 0, "trying to draw empty shape, probably uninitialized"
+proc draw*(x: Mesh, kind: GLenum = x.kind) =
+  assert x.len != 0, "trying to draw empty mesh, probably uninitialized"
   withVertexArray x.vao[0]:
     if hasIndices in x.flags:
       glDrawElements(kind, x.len.GlSizei, GlUnsignedInt, nil)

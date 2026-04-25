@@ -5,7 +5,7 @@ import ./[gl, transform, contexts, contextutils]
 
 proc draw3dShapeFlat*(
   ctx: DrawContext,
-  shape: Shape,
+  shape: Mesh,
   color: Color,
   transform: Mat4 = mat4(),
 ) =
@@ -33,7 +33,7 @@ proc draw3dShapeFlat*(
 
 proc draw3dShapeShadedByNormalsSingleSide*(
   ctx: DrawContext,
-  shape: Shape,
+  shape: Mesh,
   color: Color = color(1, 1, 1),
   shadowColor: Color = color(0.4, 0.4, 0.4),
   lightDir: Vec3 = vec3(-1, -1, -1).normalize,

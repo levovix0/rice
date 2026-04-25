@@ -176,10 +176,10 @@ proc parseStlAscii*(
   parseStlAsciiGeneric(s, i, v, Vec3)
 
 
-proc parseStlAscii*(s: string, i: var int, v: var Shape) =
+proc parseStlAscii*(s: string, i: var int, v: var Mesh) =
   var data: seq[tuple[vertex: Vec3, normal: Vec3]]
   parseStlAscii(s, i, data)
-  v = newShape(data, GL_TRIANGLES)
+  v = newMesh(data, GL_TRIANGLES)
 
 
 proc parseStlAscii*(
@@ -196,7 +196,7 @@ when isMainModule:
   let vertices = data.parseStlAscii(seq[Vec3])  #! <----
   # see also:
   #   data.parseStlAscii(seq[tuple[vertex: Vec3, normal: Vec3]])
-  #   data.parseStlAscii(Shape)
+  #   data.parseStlAscii(Mesh)
   
   echo "vertex count: ", vertices.len
 
