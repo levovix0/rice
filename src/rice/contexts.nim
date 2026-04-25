@@ -5,8 +5,6 @@ import ./[transform, gl, text as renderText]
 
 export shady.gl_Position, shady.gl_VertexID
 
-# todo: remove dependency on fusion
-
 
 when hasImageman:
   import pkg/imageman/[images as imagemanImages, colors as imagemanColors]
