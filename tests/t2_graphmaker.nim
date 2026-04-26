@@ -131,6 +131,7 @@ test "graph maker":
     glClearColor(0.1, 0.1, 0.1, 1)
     glClearDepthf(1.0)
     glClear(GL_COLOR_BUFFER_BIT or GL_DEPTH_BUFFER_BIT)
+    ctx.set(BlendRgbx)
 
     let (vw, vh) = (e.window.size.x, e.window.size.y)
 
@@ -143,9 +144,11 @@ test "graph maker":
 
     for edge in scene.edges:
       ctx.drawLine(
-        scene.nodes[edge.a].pos,
-        scene.nodes[edge.b].pos,
-        color(1, 1, 1, 1) * 0.3,
+        a = scene.nodes[edge.a].pos,
+        b = scene.nodes[edge.b].pos,
+        color = color(1, 1, 1, 1) * 0.3,
+        thickness = 2 * ctx.px.x / zoom,
+        normal = ctx.viewportToGlMatrix.inverse * vec3(0, 0, 1)
       )
     
     for node in scene.nodes:

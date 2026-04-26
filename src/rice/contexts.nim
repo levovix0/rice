@@ -394,8 +394,6 @@ macro makeShaderImpl(
     
     # var name {.inp.}: Typ
     elif body.kind == nnkVarSection:
-      var newVars = nnkVarSection.newTree()
-      newVars.copyLineInfo(body)
       for body in body:
         for varName in body[0..^3]:
           var pragmas = varName.allPragmas
@@ -411,24 +409,35 @@ macro makeShaderImpl(
 
           elif pragmas.hasAndPop(nnkOutTy.newTree) or pragmas.hasAndPop(ident("output")):
             keepVar = false
-            params[kind].add nnkIdentDefs.newTree(
+            var defsCurrent = nnkIdentDefs.newTree(
               varName.nameIdent,
               nnkVarTy.newTree(body[^2]),
-              body[^1],
             )
-            params[kind.succ].add nnkIdentDefs.newTree(
+            var defsNext = nnkIdentDefs.newTree(
               varName.nameIdent,
               body[^2],
-              body[^1],
             )
+            subTraverse(body[^1], defsCurrent)
+            subTraverse(body[^1], defsNext)
+            params[kind].add defsCurrent
+            params[kind.succ].add defsNext
+            if body[^1].kind != nnkEmpty:
+              var asgn = nnkAsgn.newTree(varName.nameIdent)
+              subTraverse(body[^1], asgn)
+              outBody.add asgn
 
           elif pragmas.hasAndPop(ident("outGl")) or pragmas.hasAndPop(ident("outputGl")):
             keepVar = false
-            params[kind].add nnkIdentDefs.newTree(
+            var defs = nnkIdentDefs.newTree(
               varName.nameIdent,
               nnkVarTy.newTree(body[^2]),
-              body[^1],
             )
+            subTraverse(body[^1], defs)
+            params[kind].add defs
+            if body[^1].kind != nnkEmpty:
+              var asgn = nnkAsgn.newTree(varName.nameIdent)
+              subTraverse(body[^1], asgn)
+              outBody.add asgn
 
           if pragmas.hasAndPop(ident("inout")):
             keepVar = false
@@ -443,15 +452,14 @@ macro makeShaderImpl(
             newN.copyLineInfo(body)
             if pragmas.len != 0:
               newN[0] = nnkPragmaExpr.newTree(newN[0], nnkPragma.newTree(pragmas))
-            newVars.add newN
-      outBody.add newVars
-      
+            outBody.add nnkVarSection.newTree(newN)
     
     elif body.len != 0:
       var newN = body.kind.newTree
       newN.copyLineInfo(body)
       for i in 0..<body.len: subTraverse body[i], newN
       outBody.add newN
+    
     else:
       outBody.add body
 
