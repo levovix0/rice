@@ -15,7 +15,7 @@ proc drawInsideImpl(ctx: DrawContext, buf: var AntialiasedFramebuffer, body: pro
 
   finally:
     ctx.pop buf, prevFbo
-    blit(buf, prevFbo.fbo)
+    blit(buf, prevFbo.prevFbo)
 
 template drawInside*(ctx: DrawContext, buf: var AntialiasedFramebuffer, body: untyped) =
   bind drawInsideImpl

@@ -69,9 +69,9 @@ proc push*(ctx: DrawContext, aafb: AntialiasedFramebuffer): PushedFrameBuffer =
 
 
 proc pop*(ctx: DrawContext, aafb: AntialiasedFramebuffer, ef: PushedFrameBuffer) =
+  ctx.pop ef
   if aafb.version == opengl3: glDisable(GL_MULTISAMPLE)
   if aafb.hasDepth: glDisable(GL_DEPTH_TEST)
-  ctx.pop ef
 
 
 proc blit*(read: AntialiasedFramebuffer, draw: GlUint, offset = vec2()) =
@@ -183,7 +183,7 @@ when isMainModule:
     )
 
     ctx.pop aafb, winFbo  #! <----
-    blit aafb, winFbo.fbo  #! <----
+    blit aafb, winFbo.prevFbo  #! <----
     # ctx.draw aafb  #! <----
 
   win.eventsHandler.onTick = proc(e: TickEvent) =

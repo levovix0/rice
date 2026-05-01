@@ -825,7 +825,7 @@ proc drawText*(ctx: DrawContext, pos: Vec3, arrangement: Arrangement, color: Vec
     
     shader.transform.uniform =
       vec4(
-        pos.xy + vec2(rect.x, -rect.y) * ctx.px - vec2(box.w - box.x, -(box.h - box.y)) * origin * ctx.px,
+        pos.xy + vec2(rect.x, -rect.y) * ctx.px - vec2(box.w + box.x, -(box.h + box.y)) * origin * ctx.px,
         vec2(rect.w, -rect.h) * ctx.px
       )
 
