@@ -46,3 +46,12 @@ run win
 ```
 
 see tests/t1_basic for a more complex example
+
+
+## Compile switches
+
+- ```nim
+  const rice_max_opengl_error_len {.intdefine.} = 512
+  ```
+  specifies how long errors in opengl may be, if you encounter an opengl error that looks like it was cut out, try increasing this parameter
+

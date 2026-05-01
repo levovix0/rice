@@ -1,4 +1,4 @@
-import std/[tables, macros, sequtils, options, strutils]
+import std/[tables, macros, sequtils, options, strutils, sets]
 import pkg/[shady, chroma, bumpy]
 import pkg/pixie/[images, fonts]
 import ./[transform, gl, text as renderText]
@@ -18,6 +18,16 @@ type
   WindingOrder* = enum
     cw   # clockwise
     ccw  # counter-clockwise
+
+  
+  FrameBuffer* = ref object
+    fbo*: FrameBuffers
+    tex*: Texture
+    size*: IVec2
+
+  PushedFrameBuffer* = object
+    fbo*, prevFbo*: GlUint
+    size*, prevSize*: IVec2
 
 
   DrawContext* = ref object
@@ -42,6 +52,9 @@ type
     projectionMatrix*: Mat4 = mat4()
     viewportToGlMatrix*: Mat4 = mat4()
     glToViewportMatrix*: Mat4 = mat4()
+
+    freeFrameBuffers: seq[FrameBuffer]
+    unusedFrameBuffers: HashSet[GlUint]
   
 
   ShaderClosure*[Signature] = ref object
@@ -672,6 +685,19 @@ proc mat4*(x: Mat2): Mat4 =
 proc vec4*(color: chroma.Color): Vec4 =
   vec4(color.r, color.g, color.b, color.a)
 
+proc color*(v: Vec4): chroma.Color =
+  chroma.Color(r: v.x, g: v.y, b: v.z, a: v.w)
+
+
+proc round*(v: Vec2): Vec2 =
+  vec2(round(v.x), round(v.y))
+
+proc ceil*(v: Vec2): Vec2 =
+  vec2(ceil(v.x), ceil(v.y))
+
+proc floor*(v: Vec2): Vec2 =
+  vec2(floor(v.x), floor(v.y))
+
 
 proc passTransform*(ctx: DrawContext, shader: tuple|object|ref object, pos = vec2(), size = vec2(10, 10), angle: float32 = 0, flipY = false) =
   shader.transform.uniform =
@@ -683,6 +709,7 @@ proc passTransform*(ctx: DrawContext, shader: tuple|object|ref object, pos = vec
 
 
 var gltex*: Uniform[Sampler2d]  # workaround shady#9
+# todo: Sampler2dMS
 
 proc transformation*(glpos: var Vec4, pos: var Vec2, size, px, ipos: Vec2, transform: Mat4) =
   let scale = vec2(px.x * size.x, px.y * -size.y)
@@ -798,7 +825,7 @@ proc drawText*(ctx: DrawContext, pos: Vec3, arrangement: Arrangement, color: Vec
     
     shader.transform.uniform =
       vec4(
-        pos.xy + rect.xy * ctx.px - vec2(box.w - box.x, -(box.h - box.y)) * origin * ctx.px,
+        pos.xy + vec2(rect.x, -rect.y) * ctx.px - vec2(box.w - box.x, -(box.h - box.y)) * origin * ctx.px,
         vec2(rect.w, -rect.h) * ctx.px
       )
 
@@ -821,6 +848,163 @@ proc drawText*(ctx: DrawContext, pos: Vec3, arrangement: Arrangement, color: Vec
   
   glBindTexture(GlTexture2d, 0)
   glDisable(GlBlend)
+
+
+
+# ===================
+# --- FrameBuffer ---
+# ===================
+
+proc requireFrameBufferWithExactOrBiggerSize*(ctx: DrawContext, minSize: IVec2): FrameBuffer =
+  ## get or resize or create a frameBuffer with size.x >= minSize.x and size.y >= minSize.y
+  let minSize = ivec2(max(minSize.x, 1), max(minSize.y, 1))
+  
+  var i = 0
+  while i < ctx.freeFrameBuffers.len:
+    template ef: untyped = ctx.freeFrameBuffers[i]
+
+    if ef.size.x >= minSize.x and ef.size.y >= minSize.y:
+      ctx.unusedFrameBuffers.excl ef.fbo[0]
+      result = ef
+      ctx.freeFrameBuffers.del i
+      return
+    
+    inc i
+  
+  # no available free buffer with size that is at least `minSize`
+
+  if ctx.freeFrameBuffers.len != 0:
+    # resize existing framebuffer
+    template ef: untyped = ctx.freeFrameBuffers[0]
+    result = ef
+
+    ef.size = ivec2(max(minSize.x, ef.size.x), max(minSize.y, ef.size.y))
+
+    let prevFbo = ctx.fbo
+    
+    glBindFramebuffer(GlFramebuffer, ef.fbo[0])
+    glBindTexture(GlTexture2d, ef.tex.raw)
+    glTexImage2D(GlTexture2d, 0, GlRgba.Glint, ef.size.x, ef.size.y, 0, GlRgba, GlUnsignedByte, nil)
+    glTexParameteri(GlTexture2d, GlTextureMinFilter, GlNearest)
+    glTexParameteri(GlTexture2d, GlTextureMagFilter, GlNearest)
+    glFramebufferTexture2D(GlFramebuffer, GlColorAttachment0, GlTexture2d, ef.tex.raw, 0)
+        
+    glBindFramebuffer(GlFramebuffer, prevFbo)
+    
+    ctx.freeFrameBuffers.del 0
+  
+  else:
+    # create new framebuffer
+    new result
+
+    template ef: untyped = result
+    ef.size = minSize
+
+    ef.fbo = newFrameBuffers(1)
+    ef.tex = newTexture()
+
+    let prevFbo = ctx.fbo
+    
+    glBindFramebuffer(GlFramebuffer, ef.fbo[0])
+    glBindTexture(GlTexture2d, ef.tex.raw)
+    glTexImage2D(GlTexture2d, 0, GlRgba.Glint, ef.size.x, ef.size.y, 0, GlRgba, GlUnsignedByte, nil)
+    glTexParameteri(GlTexture2d, GlTextureMinFilter, GlNearest)
+    glTexParameteri(GlTexture2d, GlTextureMagFilter, GlNearest)
+    glFramebufferTexture2D(GlFramebuffer, GlColorAttachment0, GlTexture2d, ef.tex.raw, 0)
+        
+    glBindFramebuffer(GlFramebuffer, prevFbo)
+
+
+proc requireFrameBuffer*(ctx: DrawContext, size: IVec2): FrameBuffer =
+  ## get or create a framebuffer with exact size
+  let size = ivec2(max(size.x, 1), max(size.y, 1))
+  
+  var i = 0
+  while i < ctx.freeFrameBuffers.len:
+    template ef: untyped = ctx.freeFrameBuffers[i]
+
+    if ef.size == size:
+      ctx.unusedFrameBuffers.excl ef.fbo[0]
+      result = ef
+      ctx.freeFrameBuffers.del i
+      return
+    
+    inc i
+  
+  # no available free buffer with size that is at least `size`
+  # create new framebuffer
+  new result
+
+  template ef: untyped = result
+  ef.size = size
+
+  ef.fbo = newFrameBuffers(1)
+  ef.tex = newTexture()
+
+  let prevFbo = ctx.fbo
+  
+  glBindFramebuffer(GlFramebuffer, ef.fbo[0])
+  glBindTexture(GlTexture2d, ef.tex.raw)
+  glTexImage2D(GlTexture2d, 0, GlRgba.Glint, ef.size.x, ef.size.y, 0, GlRgba, GlUnsignedByte, nil)
+  glTexParameteri(GlTexture2d, GlTextureMinFilter, GlNearest)
+  glTexParameteri(GlTexture2d, GlTextureMagFilter, GlNearest)
+  glFramebufferTexture2D(GlFramebuffer, GlColorAttachment0, GlTexture2d, ef.tex.raw, 0)
+      
+  glBindFramebuffer(GlFramebuffer, prevFbo)
+
+
+proc free*(ctx: DrawContext, ef: FrameBuffer) =
+  ## allow to reuse framebuffer
+  assert ctx.freeFrameBuffers.allIt(it.fbo[0] != ef.fbo[0]), "framebuffer freed twice"
+  ctx.freeFrameBuffers.add ef
+
+
+proc deleteUnusedFrameBuffers*(ctx: DrawContext) =
+  ## remove all buffers that was allowed to reuse, but has not been reused
+  var c = 0
+  for efFbo in ctx.unusedFrameBuffers:
+    var i = 0
+    while i < ctx.freeFrameBuffers.len:
+      template ef: untyped = ctx.freeFrameBuffers[i]
+      if ef.fbo[0] == efFbo:
+        ctx.freeFrameBuffers.del i
+        inc c
+      else:
+        inc i
+
+
+proc markAllFreeFrameBuffersAsUnused*(ctx: DrawContext) =
+  for ef in ctx.freeFrameBuffers:
+    ctx.unusedFrameBuffers.incl ef.fbo[0]
+
+
+proc push*(ctx: DrawContext, ef: FrameBuffer): PushedFrameBuffer =
+  ## set current framebuffer
+  result = PushedFrameBuffer(
+    fbo: ef.fbo[0],
+    size: ef.size,
+    prevFbo: ctx.fbo,
+    prevSize: ctx.fboSize,
+  )
+  ctx.fbo = ef.fbo[0]
+  ctx.fboSize = ef.size
+  glBindFramebuffer(GlFramebuffer, ef.fbo[0])
+
+  glViewport 0, 0, ef.size.x.GLsizei, ef.size.y.GLsizei
+  ctx.updateDrawingAreaSize(ef.size)
+
+
+proc pop*(ctx: DrawContext, ef: PushedFrameBuffer) =
+  ## reset current framebuffer
+  assert ctx.fbo == ef.fbo
+  assert ctx.fboSize == ef.size
+  ctx.fbo = ef.prevFbo
+  ctx.fboSize = ef.prevSize
+  
+  glBindFramebuffer(GlFramebuffer, ctx.fbo)
+
+  glViewport 0, 0, ctx.fboSize.x.GLsizei, ctx.fboSize.y.GLsizei
+  ctx.updateDrawingAreaSize(ctx.fboSize)
 
 
 

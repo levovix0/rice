@@ -135,8 +135,8 @@ proc toConvexHullsStroke*(
   strokeWidth: float32,
   lineCap: LineCap,
   lineJoin: LineJoin,
-  miterLimit: float32,
-  dashes: seq[float32],
+  miterLimit: float32 = defaultMiterLimit,
+  dashes: seq[float32] = @[],
   pixelScale: float = 1,  # the less pixelScale are, the less points are created for triangulation
 ): seq[Polygon] =
   ## triangulates stroke of the path on CPU
@@ -160,8 +160,8 @@ proc toStrokeMeshes*(
   strokeWidth: float32,
   lineCap: LineCap,
   lineJoin: LineJoin,
-  miterLimit: float32,
-  dashes: seq[float32],
+  miterLimit: float32 = defaultMiterLimit,
+  dashes: seq[float32] = @[],
   pixelScale: float = 1,  # the less pixelScale are, the less points are created for triangulation
 ): seq[Mesh] =
   ## triangulates stroke of the path, sends it to GPU
@@ -171,12 +171,11 @@ proc toStrokeMeshes*(
       result.add newMesh(convexShape, GL_TRIANGLE_FAN)
 
 
-proc drawWithSolidColor(
+proc drawWithSolidColor*(
   ctx: DrawContext,
   meshes: openArray[Mesh],
   color: Color,
   transform = mat4(),
-  windingRule = NonZero,
 ) =
   let transform = ctx.viewportToGlMatrix * transform
 
@@ -203,9 +202,8 @@ proc fillPath*(
   color: Color,
   transform = mat4(),
   pixelScale: float = 1,
-  windingRule = NonZero,
 ) =
-  drawWithSolidColor(ctx, path.toMeshes(pixelScale), color, transform, windingRule)
+  drawWithSolidColor(ctx, path.toMeshes(pixelScale), color, transform)
 
 
 

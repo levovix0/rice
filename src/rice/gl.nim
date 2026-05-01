@@ -54,6 +54,8 @@ type
   TextureObj = object
     glid: GlUint
 
+const rice_max_opengl_error_len {.intdefine.} = 512
+
 
 var freeTextures*: HashSet[GlUint]
 
@@ -143,8 +145,8 @@ proc newShader*(shaders: openarray[(GlEnum, string)]): Shader =
     glShaderSource(shad[i], 1, cast[cstringArray](cs.addr), nil)
     glCompileShader(shad[i])
     if (var success: GlInt; glGetShaderiv(shad[i], GlCompileStatus, success.addr); success != GlTrue.GlInt):
-      var buffer: array[512, char]
-      glGetShaderInfoLog(shad[i], 512, nil, cast[cstring](buffer.addr))
+      var buffer: array[rice_max_opengl_error_len, char]
+      glGetShaderInfoLog(shad[i], rice_max_opengl_error_len, nil, cast[cstring](buffer.addr))
       free()
       raise ShaderCompileDefect.newException("failed to compile shader " & $(i+1) & ": " & $cast[cstring](buffer.addr))
   
@@ -155,8 +157,8 @@ proc newShader*(shaders: openarray[(GlEnum, string)]): Shader =
     glAttachShader(result.obj, x)
   glLinkProgram(result.obj)
   if (var success: GlInt; glGetProgramiv(result.obj, GlLinkStatus, success.addr); success != GlTrue.GlInt):
-    var buffer: array[512, char]
-    glGetProgramInfoLog(result.obj, 512, nil, cast[cstring](buffer.addr))
+    var buffer: array[rice_max_opengl_error_len, char]
+    glGetProgramInfoLog(result.obj, rice_max_opengl_error_len, nil, cast[cstring](buffer.addr))
     # todo: delete gl shader programm?
     raise ShaderCompileDefect.newException("failed to link shader program: " & $cast[cstring](buffer.addr))
 
