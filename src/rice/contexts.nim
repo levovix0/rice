@@ -1,13 +1,34 @@
-import std/[tables, macros, sequtils, options, strutils, sets]
+import std/[tables, macros, sequtils, options, strutils, sets, unicode]
 import pkg/[shady, chroma, bumpy]
 import pkg/pixie/[images, fonts]
-import ./[transform, gl, text as renderText]
+import ./[transform, gl]
 
 export shady.gl_Position, shady.gl_VertexID
 
 
 when hasImageman:
   import pkg/imageman/[images as imagemanImages, colors as imagemanColors]
+
+
+type  # for the ./text module
+  GlyphFamily* = object
+    typefaceId*: int
+    size*: float32
+    underline*: bool
+    strikethrough*: bool
+    noKerningAdjustments*: bool
+
+  GlyphPlacement* = object
+    texture*: GlUint
+    x*, y*: int16
+  
+  GlyphFamilyBuffer* = object
+    placements*: Table[Rune, GlyphPlacement]
+    textures*: seq[GlUint]
+    freeX*, freeY*, freeH*: int16
+
+  GlyphBuffer* = object
+    families*: Table[GlyphFamily, GlyphFamilyBuffer]
 
 
 type
@@ -41,8 +62,8 @@ type
     px*: Vec2  ## size of a pixel
     wh*: Vec2  ## size of the drawing area in pixels
 
-    fbo*: GlUint = 0
-    fboSize*: IVec2
+    fbo*: GlUint = 0  ## current framebuffer (0 if is drawing directly on window)
+    fboSize*: IVec2   ## size of current framebuffer in pixels
     
     offset*: Vec2
 
@@ -69,6 +90,7 @@ type
 
 
 #* ------------- makeShader macros ------------- *#
+# todo: move to a new ./shaders module
 
 var newShaderId {.compileTime.}: int = 1
 
@@ -787,85 +809,10 @@ proc updateDrawingAreaSize*(ctx: DrawContext, size: IVec2) =
 
 
 
-proc drawText*(
-  ctx: DrawContext,
-  pos: Vec3,
-  arrangement: Arrangement,
-  color: Vec4,
-  origin: Vec2 = vec2(0, 0),
-  exactBoundaries = false,
-  transform = mat4(),
-) =
-  if arrangement == nil or arrangement.fonts.len == 0:
-    return
-
-  let pos = ctx.viewportToGlMatrix * transform * pos
-
-  let shader = ctx.makeShader:
-    proc vert(transform: Uniform[Vec4], placement: Uniform[Vec4]) =
-      var gl_Position {.outGl.}: Vec4
-      var uv {.out.}: Vec2
-      var ipos {.inp.}: Vec2
-      
-      gl_Position = vec4(transform.xy + ipos * transform.zw, vec2(0, 1))
-      uv = placement.xy + ipos * placement.zw
-
-    proc frag =
-      var glCol {.outGl.}: Vec4
-
-      let col = gltex.texture(uv)
-      glCol = vec4(@(color).rgb * @(color).a, @(color).a) * col.r
-
-  useAndPassUniforms shader
-  glEnable(GlBlend)
-  glBlendFuncSeparate(GlOne, GlOneMinusSrcAlpha, GlOne, GlOne)
-
-  let family = ctx.glyphBuffer.families.mgetOrPut(arrangement.fonts[0].glyphFamily, GlyphFamilyBuffer()).addr
-
-  var prevTexture = -1.Gluint
-  let box = arrangement.computeBounds()
-
-  for i, rune in arrangement.runes:
-    var rect = arrangement.selectionRects[i]
-    rect.wh = rect.wh + vec2(2, 2)
-    
-    # todo: force pixie to adjust text to pixel grid while generating arrangement, for better alligning
-
-    let offset =
-      if exactBoundaries: vec2(box.x, -box.y) * ctx.px + vec2(box.w, -box.h) * origin * ctx.px
-      else: vec2(box.w + box.x, -(box.h + box.y)) * origin * ctx.px
-    
-    shader.transform.uniform =
-      vec4(
-        pos.xy + vec2(rect.x, -rect.y) * ctx.px - offset,
-        vec2(rect.w, -rect.h) * ctx.px
-      )
-
-    let texPlacement = family[].renderIfNeeded(rune, arrangement.fonts[0], rect.wh)
-    shader.placement.uniform =
-      vec4(
-        vec2(texPlacement.x.float, texPlacement.y.float) /
-        vec2(rice_glyphBuffer_textureSize, rice_glyphBuffer_textureSize),
-
-        rect.wh /
-        vec2(rice_glyphBuffer_textureSize, rice_glyphBuffer_textureSize)
-      )
-    
-    if prevTexture != texPlacement.texture:
-      glBindTexture(GlTexture2d, texPlacement.texture)
-      glTexParameteri(GlTexture2d, GlTextureMinFilter, GlNearest)
-      prevTexture = texPlacement.texture
-
-    draw ctx.rect
-  
-  glBindTexture(GlTexture2d, 0)
-  glDisable(GlBlend)
-
-
-
 # ===================
 # --- FrameBuffer ---
 # ===================
+# todo: move to a new ./framebuffers module
 
 proc requireFrameBufferWithExactOrBiggerSize*(ctx: DrawContext, minSize: IVec2): FrameBuffer =
   ## get or resize or create a frameBuffer with size.x >= minSize.x and size.y >= minSize.y
@@ -892,17 +839,16 @@ proc requireFrameBufferWithExactOrBiggerSize*(ctx: DrawContext, minSize: IVec2):
 
     ef.size = ivec2(max(minSize.x, ef.size.x), max(minSize.y, ef.size.y))
 
-    let prevFbo = ctx.fbo
-    
     glBindFramebuffer(GlFramebuffer, ef.fbo[0])
+
     glBindTexture(GlTexture2d, ef.tex.raw)
     glTexImage2D(GlTexture2d, 0, GlRgba.Glint, ef.size.x, ef.size.y, 0, GlRgba, GlUnsignedByte, nil)
     glTexParameteri(GlTexture2d, GlTextureMinFilter, GlNearest)
     glTexParameteri(GlTexture2d, GlTextureMagFilter, GlNearest)
     glFramebufferTexture2D(GlFramebuffer, GlColorAttachment0, GlTexture2d, ef.tex.raw, 0)
         
-    glBindFramebuffer(GlFramebuffer, prevFbo)
-    
+    glBindFramebuffer(GlFramebuffer, ctx.fbo)
+
     ctx.freeFrameBuffers.del 0
   
   else:
@@ -915,16 +861,15 @@ proc requireFrameBufferWithExactOrBiggerSize*(ctx: DrawContext, minSize: IVec2):
     ef.fbo = newFrameBuffers(1)
     ef.tex = newTexture()
 
-    let prevFbo = ctx.fbo
-    
     glBindFramebuffer(GlFramebuffer, ef.fbo[0])
+    
     glBindTexture(GlTexture2d, ef.tex.raw)
     glTexImage2D(GlTexture2d, 0, GlRgba.Glint, ef.size.x, ef.size.y, 0, GlRgba, GlUnsignedByte, nil)
     glTexParameteri(GlTexture2d, GlTextureMinFilter, GlNearest)
     glTexParameteri(GlTexture2d, GlTextureMagFilter, GlNearest)
     glFramebufferTexture2D(GlFramebuffer, GlColorAttachment0, GlTexture2d, ef.tex.raw, 0)
         
-    glBindFramebuffer(GlFramebuffer, prevFbo)
+    glBindFramebuffer(GlFramebuffer, ctx.fbo)
 
 
 proc requireFrameBuffer*(ctx: DrawContext, size: IVec2): FrameBuffer =
@@ -943,7 +888,7 @@ proc requireFrameBuffer*(ctx: DrawContext, size: IVec2): FrameBuffer =
     
     inc i
   
-  # no available free buffer with size that is at least `size`
+  # no available free buffer with size that is exactly `size`
   # create new framebuffer
   new result
 
@@ -953,16 +898,15 @@ proc requireFrameBuffer*(ctx: DrawContext, size: IVec2): FrameBuffer =
   ef.fbo = newFrameBuffers(1)
   ef.tex = newTexture()
 
-  let prevFbo = ctx.fbo
-  
   glBindFramebuffer(GlFramebuffer, ef.fbo[0])
+  
   glBindTexture(GlTexture2d, ef.tex.raw)
   glTexImage2D(GlTexture2d, 0, GlRgba.Glint, ef.size.x, ef.size.y, 0, GlRgba, GlUnsignedByte, nil)
   glTexParameteri(GlTexture2d, GlTextureMinFilter, GlNearest)
   glTexParameteri(GlTexture2d, GlTextureMagFilter, GlNearest)
   glFramebufferTexture2D(GlFramebuffer, GlColorAttachment0, GlTexture2d, ef.tex.raw, 0)
       
-  glBindFramebuffer(GlFramebuffer, prevFbo)
+  glBindFramebuffer(GlFramebuffer, ctx.fbo)
 
 
 proc free*(ctx: DrawContext, ef: FrameBuffer) =
@@ -992,6 +936,7 @@ proc markAllFreeFrameBuffersAsUnused*(ctx: DrawContext) =
 
 proc push*(ctx: DrawContext, ef: FrameBuffer): PushedFrameBuffer =
   ## set current framebuffer
+  assert ctx.fbo != ef.fbo[0]
   result = PushedFrameBuffer(
     fbo: ef.fbo[0],
     size: ef.size,

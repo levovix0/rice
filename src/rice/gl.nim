@@ -50,9 +50,14 @@ type
 
   OpenglUniform*[T] = distinct GlInt
 
+  TextureKind* = enum
+    Texture2d
+    Texture2dMultisample
+
   Texture* = ref TextureObj
   TextureObj = object
-    glid: GlUint
+    raw*: GlUint
+    kind*: TextureKind
 
 const rice_max_opengl_error_len {.intdefine.} = 512
 
@@ -63,7 +68,8 @@ var freeTextures*: HashSet[GlUint]
 # -------- Buffers, VertexArrays --------
 template makeOpenglObjectSeq(t, tobj, T, gen, del, newp) =
   proc `=destroy`(xobj {.inject.}: tobj) =
-    del(xobj.n, cast[ptr T](xobj.obj.addr))
+    if xobj.n != 0:
+      del(xobj.n, cast[ptr T](xobj.obj.addr))
 
   proc newp*(n: int): t =
     if n == 0: return
@@ -260,40 +266,42 @@ proc draw*(x: Mesh, kind: GLenum = x.kind) =
 const rice_render_texturesToAllocateIfNoFree {.intdefine.} = 8
 
 proc `=destroy`(texture: TextureObj) =
-  if freeTextures.len < rice_render_texturesToAllocateIfNoFree:
-    freeTextures.incl texture.glid
+  if texture.raw == 0: return
+  if texture.kind == Texture2d and freeTextures.len < rice_render_texturesToAllocateIfNoFree:
+    freeTextures.incl texture.raw
     try:
-      texture.glid.loadTexture(pixie.newImage(1, 1))  # load empty image to force opengl use less memory
+      texture.raw.loadTexture(pixie.newImage(1, 1))  # load empty image to force opengl use less memory
     except GlError, PixieError:
       discard
   
   else:
     try:
-      glDeleteTextures(1, texture.glid.addr)
+      glDeleteTextures(1, texture.raw.addr)
     except GlError:
       discard
 
 
-proc raw*(texture: Texture): GlUint =
-  texture.glid
-
-
-proc newTexture*(forceNew = false): Texture =
-  if forceNew:
-    var newTextureGlId: GlUint
-    glGenTextures(1, newTextureGlId.addr)
-    new result
-    result.glid = newTextureGlId
-    return
+proc newTexture*(kind: TextureKind = Texture2d): Texture =
+  case kind
+  of Texture2dMultisample:
+    var id: GlUint
+    glGenTextures(1, id.addr)
+    result = Texture(
+      raw: id,
+      kind: kind
+    )
   
-  if freeTextures.len == 0:
-    var newTextureGlUids: array[rice_render_texturesToAllocateIfNoFree, GlUint]
-    glGenTextures(rice_render_texturesToAllocateIfNoFree, newTextureGlUids[0].addr)
-    for i in 0..<rice_render_texturesToAllocateIfNoFree:
-      freeTextures.incl newTextureGlUids[i]
-  
-  new result
-  result.glid = freeTextures.pop
+  of Texture2d:
+    if freeTextures.len == 0:
+      var newTextureGlUids: array[rice_render_texturesToAllocateIfNoFree, GlUint]
+      glGenTextures(rice_render_texturesToAllocateIfNoFree, newTextureGlUids[0].addr)
+      for i in 0..<rice_render_texturesToAllocateIfNoFree:
+        freeTextures.incl newTextureGlUids[i]
+    
+    result = Texture(
+      raw: freeTextures.pop,
+      kind: kind
+    )
 
 
 proc load*(texture: Texture, image: pixie.Image) =

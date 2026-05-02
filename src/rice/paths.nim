@@ -230,7 +230,7 @@ when isMainModule:
   let win = newOpenglWindow()
   opengl.loadExtensions()
   let ctx = newDrawContext()
-  var aafb = newAntialiasedFramebuffer()
+  var aafb = ctx.newAntialiasedFramebuffer(win.size)
 
   win.eventsHandler.onResize = proc(e: ResizeEvent) =
     glViewport 0, 0, e.size.x.GlInt, e.size.y.GlInt
@@ -238,8 +238,8 @@ when isMainModule:
 
 
   win.eventsHandler.onRender = proc(e: RenderEvent) =
-    aafb.resize(e.window.size)
-    startDraw aafb
+    ctx.resize(aafb, e.window.size)
+    let psh = ctx.push aafb
 
     glClearColor(0.1, 0.1, 0.1, 1)
     glClear(GL_COLOR_BUFFER_BIT)
@@ -247,8 +247,8 @@ when isMainModule:
     let (vw, vh) = (e.window.size.x, e.window.size.y)
 
     ctx.viewport = combine(
-      scale(vec3(2 / vw, -2 / vh, 1)),
-      translate(vec3(-1, 1, 0)),
+      scale(2 / vw, -2 / vh),
+      translate(-1, 1),
     )
 
     var heart = parsePath """
@@ -266,8 +266,8 @@ when isMainModule:
     ctx.strokePath(heart, color(1, 1, 1), strokeWidth = 5, transform = translate vec3(400, 0, 0))  #! <----
     ctx.strokePath(heart, color(1, 1, 1), strokeWidth = 5, lineCap=RoundCap, lineJoin=RoundJoin, pixelScale = 1/16, transform = translate vec3(600, 0, 0))  #! <----
 
-    endDraw aafb, 0
-    blit aafb, 0
+    ctx.pop psh
+    blit psh
   
   run win
 

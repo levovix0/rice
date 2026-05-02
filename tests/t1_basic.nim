@@ -9,7 +9,7 @@ test "basic":
   loadExtensions()
   
   let ctx = newDrawContext()
-  var aafb = newAntialiasedFramebuffer(depth = true)
+  var aafb = ctx.newAntialiasedFramebuffer(win.size, depth = true)
 
   var time = 0'f32
   var rot = toAngles(vec3(1, 1, 1)).fromAngles()
@@ -119,6 +119,7 @@ test "basic":
 
   win.eventsHandler.onResize = proc(e: ResizeEvent) =
     glViewport 0, 0, e.size.x.GlInt, e.size.y.GlInt
+    ctx.resize(aafb, e.size)
     ctx.updateDrawingAreaSize(e.size)
 
 

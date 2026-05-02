@@ -55,3 +55,17 @@ see tests/t1_basic for a more complex example
   ```
   specifies how long errors in opengl may be, if you encounter an opengl error that looks like it was cut out, try increasing this parameter
 
+
+## Fat
+
+A good library must be simple (to read and to modify), fast, well-documented and composable.
+
+Rice is not a good library.
+
+- rice uses shady to define shaders in nim code. And wraps it in yet another macros, that allows to inject uniforms to them. Convinient shader creation API is exported and is meant to be used, if provided functional is not enough. This significantly slows dows compile time, compared to writing shaders in GLSL. If only nim had working IC...
+- rice uses pixie (to draw text). Pixie is a huge dependency by itself and has it's own dependencies. Simply installing it using atlas takes up 300 Mb of disk space.
+
+I suppose the rice can be split into base/glue (that defines what is Mesh, DrawContext, etc), framebuffer and atlas texture manager, SDF 2d shape renderer (for UI), 3d renderer with simple lights (for CADs), 3d forward+ renderer (for games), mesh/scene file readers and writers.
+
+Also, text should be rendered on GPU, instead of "rendering it to atlas on CPU via pixie, sending this atlas to GPU, and bliting it from atlas letter by letter"
+

@@ -103,7 +103,7 @@ test "graph maker":
   loadExtensions()
   
   let ctx = newDrawContext()
-  var aafb = newAntialiasedFramebuffer(depth = true)
+  var aafb = ctx.newAntialiasedFramebuffer(win.size, depth = true)
 
   var rot = toAngles(vec3(1, 1, 1)).fromAngles()
   var pos = vec3()
@@ -185,6 +185,7 @@ test "graph maker":
 
   win.eventsHandler.onResize = proc(e: ResizeEvent) =
     glViewport 0, 0, e.size.x.GlInt, e.size.y.GlInt
+    ctx.resize(aafb, e.size)
     ctx.updateDrawingAreaSize(e.size)
 
 

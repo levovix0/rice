@@ -72,3 +72,12 @@ proc vec3*(v: Vec2): Vec3 =
 
 proc rotate*(v: Vec2, angle_rad: float32): Vec2 =
   v * cos(angle_rad) + vec2(-v.y, v.x) * sin(angle_rad)
+
+
+
+proc translate*(x: float32 = 0, y: float32 = 0, z: float32 = 0): Mat4 =
+  translate vec3(x, y, z)
+
+proc scale*(x: float32 = 1, y: float32 = 1, z: float32 = 1): Mat4 =
+  scale vec3(x, y, z)
+

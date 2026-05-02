@@ -3,6 +3,7 @@ import ./[gl, contexts]
 
 ## drawing primitives with fragment shader antialiasing
 ## todo: make api the same as in ./primitives
+## todo: use figdraw?
 
 
 proc roundRect(pos, size: Vec2, radius: float32): float32 =

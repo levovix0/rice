@@ -8,39 +8,49 @@ type
     opengl3
     opengl4
 
-  AntialiasedFramebuffer* = object
-    fbo*: Framebuffers
+  AntialiasedFrameBuffer* = object
+    fbo*: FrameBuffers
     col*: Texture
     depth*: Texture
     size*: IVec2
     version*: OpenglVersion
 
+  PushedAntialiasedFrameBuffer* = object
+    hasDepth*: bool
+    version*: OpenglVersion
+    fb*: PushedFrameBuffer
+
 const aafbShaderId = -1
 
 
-proc `==`*(aafb: AntialiasedFramebuffer, _: typeof(nil)): bool = aafb.fbo.len == 0 or aafb.size.x == 0 or aafb.size.y == 0
+proc `==`*(aafb: AntialiasedFrameBuffer, _: typeof(nil)): bool = aafb.fbo.len == 0 or aafb.col.raw == 0
+
+proc hasDepth*(this: AntialiasedFrameBuffer): bool =
+  this.depth != nil
+
+proc resize*(ctx: DrawContext, this: var AntialiasedFrameBuffer, size: IVec2)
 
 
-proc newAntialiasedFramebuffer*(depth = false, version = OpenglVersion.low): AntialiasedFramebuffer =
+proc newAntialiasedFrameBuffer*(ctx: DrawContext, size: IVec2, depth = false, version = OpenglVersion.low): AntialiasedFrameBuffer =
   result.fbo = newFrameBuffers(1)
   result.version = version
   
   result.col = if result.version != opengl_es3: newTexture() else: Texture()
   if depth:
     result.depth = if result.version != opengl_es3: newTexture() else: Texture()
+  
+  ctx.resize(result, size)
 
 
-proc hasDepth*(this: AntialiasedFramebuffer): bool =
-  this.depth != nil
-
-
-proc resize*(this: var AntialiasedFramebuffer, size: IVec2) =
-  if this == nil: this = newAntialiasedFramebuffer()
+proc resize*(ctx: DrawContext, this: var AntialiasedFrameBuffer, size: IVec2) =
+  if this.fbo.len == 0:
+    this = ctx.newAntialiasedFrameBuffer(size)
+    return
   if this.size == size: return
   this.size = size
 
   if this.version == opengl_es3:
-    this.col = newTexture(forceNew = true)
+    this.col = newTexture(kind = Texture2dMultisample)
 
   glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, this.col.raw)
   if this.version == opengl3:
@@ -51,7 +61,7 @@ proc resize*(this: var AntialiasedFramebuffer, size: IVec2) =
 
   if this.hasDepth:
     if this.version == opengl_es3:
-      this.depth = newTexture(forceNew = true)
+      this.depth = newTexture(kind = Texture2dMultisample)
 
     glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, this.depth.raw)
     if this.version == opengl3:
@@ -60,37 +70,51 @@ proc resize*(this: var AntialiasedFramebuffer, size: IVec2) =
       glTexStorage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_DEPTH_COMPONENT32F, size.x.GlInt, size.y.GlInt, GL_TRUE)
     glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0)
 
-  glBindFramebuffer(GL_FRAMEBUFFER, this.fbo[0])
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, this.col.raw, 0)
-  if this.hasDepth: glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, this.depth.raw, 0)
-  glBindFramebuffer(GL_FRAMEBUFFER, 0)
+  glBindFrameBuffer(GL_FRAMEBUFFER, this.fbo[0])
+  glFrameBufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, this.col.raw, 0)
+  if this.hasDepth: glFrameBufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D_MULTISAMPLE, this.depth.raw, 0)
+  glBindFrameBuffer(GL_FRAMEBUFFER, ctx.fbo)
 
 
-proc push*(ctx: DrawContext, aafb: AntialiasedFramebuffer): PushedFrameBuffer =
+proc push*(ctx: DrawContext, aafb: AntialiasedFrameBuffer): PushedAntialiasedFrameBuffer =
   if aafb.version == opengl3: glEnable(GL_MULTISAMPLE)
   if aafb.hasDepth: glEnable(GL_DEPTH_TEST)
-  ctx.push(FrameBuffer(fbo: aafb.fbo, tex: aafb.col, size: aafb.size))
-
-
-proc pop*(ctx: DrawContext, aafb: AntialiasedFramebuffer, ef: PushedFrameBuffer) =
-  ctx.pop ef
-  if aafb.version == opengl3: glDisable(GL_MULTISAMPLE)
-  if aafb.hasDepth: glDisable(GL_DEPTH_TEST)
-
-
-proc blit*(read: AntialiasedFramebuffer, draw: GlUint, offset = vec2()) =
-  glBindFramebuffer(GL_READ_FRAMEBUFFER, read.fbo[0])
-  glBindFramebuffer(GL_DRAW_FRAMEBUFFER, draw)
-  glBlitFramebuffer(
-    0, 0,
-    read.size.x, read.size.y,
-    offset.x.round.int32, offset.y.round.int32,
-    read.size.x, read.size.y,
-    GL_COLOR_BUFFER_BIT, GL_NEAREST.GlEnum
+  PushedAntialiasedFrameBuffer(
+    fb: ctx.push(FrameBuffer(fbo: aafb.fbo, tex: aafb.col, size: aafb.size)),
+    version: aafb.version,
+    hasDepth: aafb.hasDepth,
   )
 
 
-proc draw*(ctx: DrawContext, aafb: AntialiasedFramebuffer, transform = mat4()) =
+proc pop*(ctx: DrawContext, ef: PushedAntialiasedFrameBuffer) =
+  ctx.pop ef.fb
+  if ef.version == opengl3: glDisable(GL_MULTISAMPLE)
+  if ef.hasDepth: glDisable(GL_DEPTH_TEST)
+
+
+proc blit*(read: GlUint, draw: GlUint, size: IVec2, offset = vec2()) =
+  glBindFrameBuffer(GL_READ_FRAMEBUFFER, read)
+  glBindFrameBuffer(GL_DRAW_FRAMEBUFFER, draw)
+  glBlitFrameBuffer(
+    0, 0,
+    size.x, size.y,
+    offset.x.round.int32, offset.y.round.int32,
+    size.x, size.y,
+    GL_COLOR_BUFFER_BIT, GL_NEAREST.GlEnum
+  )
+  glBindFrameBuffer(GL_READ_FRAMEBUFFER, 0)
+  glBindFrameBuffer(GL_DRAW_FRAMEBUFFER, 0)
+
+
+proc blit*(read: AntialiasedFrameBuffer, draw: GlUint, offset = vec2()) =
+  blit(read.fbo[0], draw, read.size, offset)
+
+proc blit*(readDraw: PushedAntialiasedFrameBuffer, offset = vec2()) =
+  blit(readDraw.fb.fbo, readDraw.fb.prevFbo, readDraw.fb.size, offset)
+
+
+
+proc draw*(ctx: DrawContext, aafb: AntialiasedFrameBuffer, transform = mat4()) =
   ## draw antialiased onto other framebuffer
   let transform = ctx.viewportToGlMatrix * transform
 
@@ -157,7 +181,7 @@ when isMainModule:
   
   loadExtensions()
   let ctx = newDrawContext()
-  var aafb = newAntialiasedFramebuffer()  #! <----
+  var aafb = ctx.newAntialiasedFrameBuffer(win.size)  #! <----
 
   var time = 0'f32
 
@@ -166,7 +190,7 @@ when isMainModule:
     ctx.updateDrawingAreaSize(e.size)
 
   win.eventsHandler.onRender = proc(e: RenderEvent) =
-    aafb.resize(e.window.size)  #! <----
+    ctx.resize(aafb, e.window.size)  #! <----
     let winFbo = ctx.push aafb  #! <----
 
     glClearColor(0.1, 0.1, 0.1, 1)
@@ -186,8 +210,8 @@ when isMainModule:
       rotateZ(time / 4, origin = vec3(rect.xy + rect.wh/2, 0)),
     )
 
-    ctx.pop aafb, winFbo  #! <----
-    blit aafb, winFbo.prevFbo  #! <----
+    ctx.pop winFbo  #! <----
+    blit winFbo  #! <----
     # ctx.draw aafb  #! <----
 
   win.eventsHandler.onTick = proc(e: TickEvent) =

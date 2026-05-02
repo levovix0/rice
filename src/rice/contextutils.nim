@@ -6,16 +6,16 @@ const PiF* = Pi.float32
 
 
 proc drawInsideImpl(ctx: DrawContext, buf: var AntialiasedFramebuffer, body: proc()) =
-  resize(buf, ctx.fboSize)
-  let prevFbo = ctx.push(buf)
+  ctx.resize(buf, ctx.fboSize)
+  let psh = ctx.push(buf)
   ctx.fbo = buf.fbo[0]
   
   try:
     body()
 
   finally:
-    ctx.pop buf, prevFbo
-    blit(buf, prevFbo.prevFbo)
+    ctx.pop psh
+    blit(psh)
 
 template drawInside*(ctx: DrawContext, buf: var AntialiasedFramebuffer, body: untyped) =
   bind drawInsideImpl
