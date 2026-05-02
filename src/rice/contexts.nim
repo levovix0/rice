@@ -787,7 +787,15 @@ proc updateDrawingAreaSize*(ctx: DrawContext, size: IVec2) =
 
 
 
-proc drawText*(ctx: DrawContext, pos: Vec3, arrangement: Arrangement, color: Vec4, origin: Vec2 = vec2(0.5, 0.5), transform = mat4()) =
+proc drawText*(
+  ctx: DrawContext,
+  pos: Vec3,
+  arrangement: Arrangement,
+  color: Vec4,
+  origin: Vec2 = vec2(0, 0),
+  exactBoundaries = false,
+  transform = mat4(),
+) =
   if arrangement == nil or arrangement.fonts.len == 0:
     return
 
@@ -822,10 +830,14 @@ proc drawText*(ctx: DrawContext, pos: Vec3, arrangement: Arrangement, color: Vec
     rect.wh = rect.wh + vec2(2, 2)
     
     # todo: force pixie to adjust text to pixel grid while generating arrangement, for better alligning
+
+    let offset =
+      if exactBoundaries: vec2(box.x, -box.y) * ctx.px + vec2(box.w, -box.h) * origin * ctx.px
+      else: vec2(box.w + box.x, -(box.h + box.y)) * origin * ctx.px
     
     shader.transform.uniform =
       vec4(
-        pos.xy + vec2(rect.x, -rect.y) * ctx.px - vec2(box.w + box.x, -(box.h + box.y)) * origin * ctx.px,
+        pos.xy + vec2(rect.x, -rect.y) * ctx.px - offset,
         vec2(rect.w, -rect.h) * ctx.px
       )
 

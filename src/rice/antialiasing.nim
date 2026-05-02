@@ -18,6 +18,9 @@ type
 const aafbShaderId = -1
 
 
+proc `==`*(aafb: AntialiasedFramebuffer, _: typeof(nil)): bool = aafb.fbo.len == 0 or aafb.size.x == 0 or aafb.size.y == 0
+
+
 proc newAntialiasedFramebuffer*(depth = false, version = OpenglVersion.low): AntialiasedFramebuffer =
   result.fbo = newFrameBuffers(1)
   result.version = version
@@ -32,6 +35,7 @@ proc hasDepth*(this: AntialiasedFramebuffer): bool =
 
 
 proc resize*(this: var AntialiasedFramebuffer, size: IVec2) =
+  if this == nil: this = newAntialiasedFramebuffer()
   if this.size == size: return
   this.size = size
 
