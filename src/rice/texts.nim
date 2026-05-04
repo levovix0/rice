@@ -3,6 +3,15 @@ import pkg/[chroma, shady, bumpy]
 import pkg/pixie/[fonts, images, paints]
 import ./[gl, contexts]
 
+type
+  TextDrawContext* = object
+    family: ptr GlyphFamilyBuffer
+    transform: OpenglUniform[Vec4]
+    placement: OpenglUniform[Vec4]
+    color*: OpenglUniform[Vec4]
+    prevTexture: GlUint = (-1).GlUint
+    font: Font
+
 
 const rice_glyphBuffer_textureSize* {.intdefine.} = 1024
 
@@ -61,8 +70,10 @@ proc render(familyBuffer: var GlyphFamilyBuffer, placement: var GlyphPlacement, 
 
   font.paint = paint
 
-  glBindTexture(GlTexture2d, placement.texture)
-  glTexSubImage2D(GlTexture2d, 0, placement.x, placement.y, w, h, GlRgba, GlUnsignedByte, image.data[0].addr)
+  try:  # todo: sometimes crushes on big text sizes
+    glBindTexture(GlTexture2d, placement.texture)
+    glTexSubImage2D(GlTexture2d, 0, placement.x, placement.y, w, h, GlRgba, GlUnsignedByte, image.data[0].addr)
+  except Glerror: discard
 
 
 proc renderIfNeeded*(familyBuffer: var GlyphFamilyBuffer, rune: Rune, font: Font, size: Vec2): GlyphPlacement =
@@ -84,6 +95,73 @@ proc glyphFamily*(font: Font): GlyphFamily =
   )
 
 
+proc startTextDrawing*(ctx: DrawContext, font: Font): TextDrawContext =
+  let shader = ctx.makeShader:
+    proc vert(transform: Uniform[Vec4], placement: Uniform[Vec4]) =
+      var gl_Position {.outGl.}: Vec4
+      var uv {.out.}: Vec2
+      var ipos {.inp.}: Vec2
+      
+      gl_Position = vec4(transform.xy + ipos * transform.zw, vec2(0, 1))
+      uv = placement.xy + ipos * placement.zw
+
+    proc frag(color: Uniform[Vec4]) =
+      var glCol {.outGl.}: Vec4
+
+      let col = gltex.texture(uv)
+      glCol = vec4(color.rgb * color.a, color.a) * col.r
+
+  use shader.shader
+
+  glEnable(GlBlend)
+  glBlendFuncSeparate(GlOne, GlOneMinusSrcAlpha, GlOne, GlOne)
+
+  TextDrawContext(
+    family: ctx.glyphBuffer.families.mgetOrPut(font.glyphFamily, GlyphFamilyBuffer()).addr,
+    transform: shader.transform,
+    placement: shader.placement,
+    color: shader.color,
+    font: font,
+  )
+
+proc endTextDrawing*(ctx: DrawContext) =
+  glBindTexture(GlTexture2d, 0)
+  glDisable(GlBlend)
+
+
+proc fastDrawRune*(
+  ctx: DrawContext,
+  rune: Rune,
+  rect: Rect,
+  context: var TextDrawContext,
+) =
+
+  var rect = rect
+  rect.wh = rect.wh + vec2(2, 2)
+  
+  context.transform.uniform =
+    vec4(
+      rect.xy,
+      vec2(rect.w, -rect.h) * ctx.px
+    )
+
+  let texPlacement = context.family[].renderIfNeeded(rune, context.font, rect.wh)
+  context.placement.uniform =
+    vec4(
+      vec2(texPlacement.x.float, texPlacement.y.float) /
+      vec2(rice_glyphBuffer_textureSize, rice_glyphBuffer_textureSize),
+
+      rect.wh /
+      vec2(rice_glyphBuffer_textureSize, rice_glyphBuffer_textureSize)
+    )
+  
+  if context.prevTexture != texPlacement.texture:
+    glBindTexture(GlTexture2d, texPlacement.texture)
+    glTexParameteri(GlTexture2d, GlTextureMinFilter, GlNearest)
+    context.prevTexture = texPlacement.texture
+
+  draw ctx.rect
+
 
 proc drawText*(
   ctx: DrawContext,
@@ -97,64 +175,20 @@ proc drawText*(
   if arrangement == nil or arrangement.fonts.len == 0:
     return
 
+  var context = ctx.startTextDrawing(arrangement.fonts[0])
+  context.color.uniform = color
+
   let pos = ctx.viewportToGlMatrix * transform * pos
-
-  let shader = ctx.makeShader:
-    proc vert(transform: Uniform[Vec4], placement: Uniform[Vec4]) =
-      var gl_Position {.outGl.}: Vec4
-      var uv {.out.}: Vec2
-      var ipos {.inp.}: Vec2
-      
-      gl_Position = vec4(transform.xy + ipos * transform.zw, vec2(0, 1))
-      uv = placement.xy + ipos * placement.zw
-
-    proc frag =
-      var glCol {.outGl.}: Vec4
-
-      let col = gltex.texture(uv)
-      glCol = vec4(@(color).rgb * @(color).a, @(color).a) * col.r
-
-  useAndPassUniforms shader
-  glEnable(GlBlend)
-  glBlendFuncSeparate(GlOne, GlOneMinusSrcAlpha, GlOne, GlOne)
-
-  let family = ctx.glyphBuffer.families.mgetOrPut(arrangement.fonts[0].glyphFamily, GlyphFamilyBuffer()).addr
-
-  var prevTexture = -1.Gluint
   let box = arrangement.computeBounds()
+
+  let offset =
+    if exactBoundaries: vec2(box.x, -box.y) * ctx.px + vec2(box.w, -box.h) * origin * ctx.px
+    else: vec2(box.w + box.x, -(box.h + box.y)) * origin * ctx.px
 
   for i, rune in arrangement.runes:
     var rect = arrangement.selectionRects[i]
     rect.wh = rect.wh + vec2(2, 2)
     
-    # todo: force pixie to adjust text to pixel grid while generating arrangement, for better alligning
-
-    let offset =
-      if exactBoundaries: vec2(box.x, -box.y) * ctx.px + vec2(box.w, -box.h) * origin * ctx.px
-      else: vec2(box.w + box.x, -(box.h + box.y)) * origin * ctx.px
-    
-    shader.transform.uniform =
-      vec4(
-        pos.xy + vec2(rect.x, -rect.y) * ctx.px - offset,
-        vec2(rect.w, -rect.h) * ctx.px
-      )
-
-    let texPlacement = family[].renderIfNeeded(rune, arrangement.fonts[0], rect.wh)
-    shader.placement.uniform =
-      vec4(
-        vec2(texPlacement.x.float, texPlacement.y.float) /
-        vec2(rice_glyphBuffer_textureSize, rice_glyphBuffer_textureSize),
-
-        rect.wh /
-        vec2(rice_glyphBuffer_textureSize, rice_glyphBuffer_textureSize)
-      )
-    
-    if prevTexture != texPlacement.texture:
-      glBindTexture(GlTexture2d, texPlacement.texture)
-      glTexParameteri(GlTexture2d, GlTextureMinFilter, GlNearest)
-      prevTexture = texPlacement.texture
-
-    draw ctx.rect
+    ctx.fastDrawRune(rune, rect(pos.xy + vec2(rect.x, -rect.y) * ctx.px - offset, rect.wh), context)
   
-  glBindTexture(GlTexture2d, 0)
-  glDisable(GlBlend)
+  ctx.endTextDrawing()
