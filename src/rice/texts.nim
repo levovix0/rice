@@ -115,6 +115,7 @@ proc startTextDrawing*(ctx: DrawContext, font: Font): TextDrawContext =
 
   glEnable(GlBlend)
   glBlendFuncSeparate(GlOne, GlOneMinusSrcAlpha, GlOne, GlOne)
+  glBindVertexArray(ctx.rect.vao[0])
 
   TextDrawContext(
     family: ctx.glyphBuffer.families.mgetOrPut(font.glyphFamily, GlyphFamilyBuffer()).addr,
@@ -127,6 +128,7 @@ proc startTextDrawing*(ctx: DrawContext, font: Font): TextDrawContext =
 proc endTextDrawing*(ctx: DrawContext) =
   glBindTexture(GlTexture2d, 0)
   glDisable(GlBlend)
+  glBindVertexArray(0)
 
 
 proc fastDrawRune*(
@@ -160,7 +162,7 @@ proc fastDrawRune*(
     glTexParameteri(GlTexture2d, GlTextureMinFilter, GlNearest)
     context.prevTexture = texPlacement.texture
 
-  draw ctx.rect
+  glDrawElements(ctx.rect.kind, ctx.rect.len.GlSizei, GlUnsignedInt, nil)
 
 
 proc drawText*(
