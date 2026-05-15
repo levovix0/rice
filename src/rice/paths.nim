@@ -1,3 +1,4 @@
+import std/algorithm
 import pkg/[bumpy, chroma, vmath]
 import pkg/pixie/paths {.all.} as pixiePaths
 import ./[gl, contexts]
@@ -113,7 +114,7 @@ proc decompose(poly: Polygon, result: var seq[Polygon]) =
 
   result.add(poly)
 
-proc toConvexHulls(poly: Polygon): seq[Polygon] =
+proc toConvexHulls*(poly: Polygon): seq[Polygon] =
   ## splits polygon of arbitrary shape into pieces, drawable corretly via GL_TRIANGLE_FAN
   ## uses Bayazit algorithm https://github.com/Crackshell/bayazit.h
   result = @[]
@@ -144,14 +145,113 @@ proc toConvexHullsStroke*(
     result.add shape.toConvexHulls
 
 
+proc signedArea*(poly: Polygon): float32 =
+  ## Positive = CCW (counter-clockwise), negative = CW.
+  for i in 0..<poly.len:
+    let j = (i + 1) mod poly.len
+    result += poly[i].x * poly[j].y - poly[j].x * poly[i].y
+  result *= 0.5f32
+
+
+proc bridgeHole*(outer: Polygon, hole: Polygon): Polygon =
+  ## Merges hole into outer creating a single simple polygon via a horizontal bridge.
+  ## Expects outer to be CCW (positive area) and hole to be CW (negative area).
+
+  # Find the rightmost vertex of the hole
+  var mIdx = 0
+  for i in 1..<hole.len:
+    if hole[i].x > hole[mIdx].x:
+      mIdx = i
+  let m = hole[mIdx]
+
+  # Find the nearest outer edge hit by a rightward ray from m
+  var bestIx = float32.high
+  var bestI = -1
+
+  for i in 0..<outer.len:
+    let j = (i + 1) mod outer.len
+    let a = outer[i]
+    let b = outer[j]
+    if (a.y <= m.y) != (b.y <= m.y):
+      let ix = a.x + (m.y - a.y) / (b.y - a.y) * (b.x - a.x)
+      if ix >= m.x and ix < bestIx:
+        bestIx = ix
+        bestI = i
+
+  if bestI == -1:
+    return outer
+
+  let j = (bestI + 1) mod outer.len
+  let bridgeIdx = if outer[bestI].x >= outer[j].x: bestI else: j
+
+  result = newSeqOfCap[Vec2](outer.len + hole.len + 2)
+  for i in 0..bridgeIdx:
+    result.add outer[i]
+  for i in 0..<hole.len:
+    result.add hole[(mIdx + i) mod hole.len]
+  result.add hole[mIdx]
+  for i in bridgeIdx..<outer.len:
+    result.add outer[i]
+
+
+proc removeHoles*(contours: seq[Polygon]): seq[Polygon] =
+  ## Merges hole contours into their respective outer polygons.
+  ## Identifies holes via centroid containment test — winding-order-independent.
+  if contours.len <= 1:
+    return contours
+
+  var centroids = newSeq[Vec2](contours.len)
+  for i, poly in contours:
+    var c = vec2(0, 0)
+    for v in poly: c += v
+    centroids[i] = c / float32(poly.len)
+
+  var areas = newSeq[float32](contours.len)
+  for i, poly in contours: areas[i] = abs(signedArea(poly))
+
+  # A contour is a hole of the smallest enclosing polygon with strictly larger area.
+  # The area check handles concentric shapes where centroids coincide.
+  var outerOf = newSeq[int](contours.len)
+  for i in 0..<contours.len: outerOf[i] = -1
+
+  for i in 0..<contours.len:
+    var bestArea = float32.high
+    for j in 0..<contours.len:
+      if i == j: continue
+      if areas[j] > areas[i] and contours[j].overlaps(centroids[i]):
+        if areas[j] < bestArea:
+          bestArea = areas[j]
+          outerOf[i] = j
+
+  var polys = newSeq[Polygon](contours.len)
+  for i in 0..<contours.len: polys[i] = contours[i]
+
+  # Ensure outer contours are CCW (positive area) for Bayazit
+  for i in 0..<contours.len:
+    if outerOf[i] == -1 and signedArea(polys[i]) < 0:
+      polys[i].reverse()
+
+  # Merge each hole into its outer polygon
+  for i in 0..<contours.len:
+    if outerOf[i] != -1:
+      var hole = polys[i]
+      if signedArea(hole) > 0:  # ensure hole is CW so it subtracts area
+        hole.reverse()
+      polys[outerOf[i]] = bridgeHole(polys[outerOf[i]], hole)
+
+  for i in 0..<contours.len:
+    if outerOf[i] == -1:
+      result.add polys[i]
+
+
 proc toMeshes*(
   path: Path,
   pixelScale: float = 1,  # the less pixelScale are, the less points are created for triangulation
 ): seq[Mesh] =
-  ## triangulates path, sends it to GPU
+  ## triangulates path, sends it to GPU; handles holes in contours correctly
   let shapes = pixiePaths.commandsToShapes(path, true, pixelScale)
-  for shape in shapes:
-    for convexShape in shape.toConvexHulls:
+  for poly in shapes.removeHoles():
+    for convexShape in poly.toConvexHulls:
       result.add newMesh(convexShape, GL_TRIANGLE_FAN)
 
 

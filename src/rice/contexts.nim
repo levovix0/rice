@@ -10,7 +10,7 @@ when hasImageman:
   import pkg/imageman/[images as imagemanImages, colors as imagemanColors]
 
 
-type  # for the ./text module
+type  # for the ./rasterTexts module
   GlyphFamily* = object
     typefaceId*: int
     size*: float32
@@ -21,7 +21,7 @@ type  # for the ./text module
   GlyphPlacement* = object
     texture*: GlUint
     x*, y*: int16
-  
+
   GlyphFamilyBuffer* = object
     placements*: Table[Rune, GlyphPlacement]
     textures*: seq[GlUint]
@@ -29,6 +29,14 @@ type  # for the ./text module
 
   GlyphBuffer* = object
     families*: Table[GlyphFamily, GlyphFamilyBuffer]
+
+
+type  # for the ./texts module
+  GlyphMeshFamilyKey* = object
+    typefaceId*: int
+
+  GlyphMeshBuffer* = object
+    meshes*: Table[Rune, seq[Mesh]]
 
 
 type
@@ -68,6 +76,7 @@ type
     offset*: Vec2
 
     glyphBuffer*: GlyphBuffer
+    glyphMeshes*: Table[GlyphMeshFamilyKey, GlyphMeshBuffer]
 
     viewportMatrix*: Mat4 = mat4()
     projectionMatrix*: Mat4 = mat4()
