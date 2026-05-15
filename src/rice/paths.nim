@@ -195,8 +195,9 @@ proc bridgeHole*(outer: Polygon, hole: Polygon): Polygon =
 
 
 proc removeHoles*(contours: seq[Polygon]): seq[Polygon] =
-  ## Merges hole contours into their respective outer polygons.
-  ## Identifies holes via centroid containment test — winding-order-independent.
+  ## Merges hole contours into their outer polygons via a bridge.
+  ## A hole is an inner contour with opposite winding to its enclosing outer (non-zero fill rule).
+  ## Inner contours with the same winding as their outer are additive — returned as separate polygons.
   if contours.len <= 1:
     return contours
 
@@ -209,8 +210,7 @@ proc removeHoles*(contours: seq[Polygon]): seq[Polygon] =
   var areas = newSeq[float32](contours.len)
   for i, poly in contours: areas[i] = abs(signedArea(poly))
 
-  # A contour is a hole of the smallest enclosing polygon with strictly larger area.
-  # The area check handles concentric shapes where centroids coincide.
+  # Find the smallest enclosing polygon for each contour.
   var outerOf = newSeq[int](contours.len)
   for i in 0..<contours.len: outerOf[i] = -1
 
@@ -226,22 +226,40 @@ proc removeHoles*(contours: seq[Polygon]): seq[Polygon] =
   var polys = newSeq[Polygon](contours.len)
   for i in 0..<contours.len: polys[i] = contours[i]
 
-  # Ensure outer contours are CCW (positive area) for Bayazit
-  for i in 0..<contours.len:
-    if outerOf[i] == -1 and signedArea(polys[i]) < 0:
-      polys[i].reverse()
-
-  # Merge each hole into its outer polygon
+  # True hole = opposite winding to its enclosing outer (non-zero rule: winding cancels to 0).
+  # Same winding = additive sub-shape (winding accumulates, area stays filled).
+  var isHole = newSeq[bool](contours.len)
   for i in 0..<contours.len:
     if outerOf[i] != -1:
+      isHole[i] = signedArea(contours[i]) * signedArea(contours[outerOf[i]]) < 0
+
+  # Ensure outer contours and additive inner contours are CCW for Bayazit
+  for i in 0..<contours.len:
+    if outerOf[i] == -1 or not isHole[i]:
+      if signedArea(polys[i]) < 0:
+        polys[i].reverse()
+
+  # Merge each true hole into its outer polygon
+  for i in 0..<contours.len:
+    if isHole[i]:
       var hole = polys[i]
-      if signedArea(hole) > 0:  # ensure hole is CW so it subtracts area
+      if signedArea(hole) > 0:
         hole.reverse()
       polys[outerOf[i]] = bridgeHole(polys[outerOf[i]], hole)
 
   for i in 0..<contours.len:
-    if outerOf[i] == -1:
+    if outerOf[i] == -1 or not isHole[i]:
       result.add polys[i]
+
+
+proc decomposeConvex*(path: Path, pixelScale: float = 1): seq[Polygon] =
+  ## Returns convex polygons covering the filled area of path, holes handled correctly.
+  var contours: seq[Polygon]
+  for shape in pixiePaths.commandsToShapes(path, true, pixelScale):
+    contours.add shape
+  for poly in contours.removeHoles():
+    for convex in poly.toConvexHulls():
+      result.add convex
 
 
 proc toMeshes*(
