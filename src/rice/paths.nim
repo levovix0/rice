@@ -153,6 +153,27 @@ proc signedArea*(poly: Polygon): float32 =
   result *= 0.5f32
 
 
+proc fanStart(poly: Polygon): int =
+  ## Returns the vertex index from which GL_TRIANGLE_FAN covers the polygon without artifacts.
+  ## For a convex polygon any vertex works; this handles near-degenerate cases from bridging.
+  let n = poly.len
+  if n < 3: return 0
+  let wantPos = signedArea(poly) >= 0
+  for i in 0..<n:
+    var ok = true
+    for k in 1..<n - 1:
+      let a = area(poly[i], poly[(i + k) mod n], poly[(i + k + 1) mod n])
+      if wantPos and a < 0: ok = false; break
+      if not wantPos and a > 0: ok = false; break
+    if ok: return i
+  return 0
+
+proc rotatePoly(poly: Polygon, start: int): Polygon =
+  result = newSeqOfCap[Vec2](poly.len)
+  for k in 0..<poly.len:
+    result.add poly[(start + k) mod poly.len]
+
+
 proc bridgeHole*(outer: Polygon, hole: Polygon): Polygon =
   ## Merges hole into outer creating a single simple polygon via a horizontal bridge.
   ## Expects outer to be CCW (positive area) and hole to be CW (negative area).
@@ -259,7 +280,7 @@ proc decomposeConvex*(path: Path, pixelScale: float = 1): seq[Polygon] =
     contours.add shape
   for poly in contours.removeHoles():
     for convex in poly.toConvexHulls():
-      result.add convex
+      result.add rotatePoly(convex, fanStart(convex))
 
 
 proc toMeshes*(
@@ -270,7 +291,7 @@ proc toMeshes*(
   let shapes = pixiePaths.commandsToShapes(path, true, pixelScale)
   for poly in shapes.removeHoles():
     for convexShape in poly.toConvexHulls:
-      result.add newMesh(convexShape, GL_TRIANGLE_FAN)
+      result.add newMesh(rotatePoly(convexShape, fanStart(convexShape)), GL_TRIANGLE_FAN)
 
 
 proc toStrokeMeshes*(
@@ -286,7 +307,7 @@ proc toStrokeMeshes*(
   let shapes = pixiePaths.strokeShapes(path.commandsToShapes(true, pixelScale), strokeWidth, lineCap, lineJoin, miterLimit, dashes, pixelScale)
   for shape in shapes:
     for convexShape in shape.toConvexHulls:
-      result.add newMesh(convexShape, GL_TRIANGLE_FAN)
+      result.add newMesh(rotatePoly(convexShape, fanStart(convexShape)), GL_TRIANGLE_FAN)
 
 
 proc drawWithSolidColor*(
