@@ -3,9 +3,9 @@ import ./[gl, transform, contexts, contextutils]
 
 
 
-proc draw3dShapeFlat*(
+proc fill3dMeshFlat*(
   ctx: DrawContext,
-  shape: Mesh,
+  mesh: Mesh,
   color: Color,
   transform: Mat4 = mat4(),
 ) =
@@ -27,13 +27,21 @@ proc draw3dShapeFlat*(
 
   ctx.withPushPopIf blendRgbx, color.a != 1:
     useAndPassUniforms shader
-    draw shape
+    draw mesh
 
-
-
-proc draw3dShapeShadedByNormalsSingleSide*(
+proc draw3dShapeFlat*(
   ctx: DrawContext,
   shape: Mesh,
+  color: Color,
+  transform: Mat4 = mat4(),
+) {.deprecated: "renamed to fill3dMeshFlat".} =
+  fill3dMeshFlat(ctx, shape, color, transform)
+
+
+
+proc fill3dMeshShadedByNormalsSingleSide*(
+  ctx: DrawContext,
+  mesh: Mesh,
   color: Color = color(1, 1, 1),
   shadowColor: Color = color(0.4, 0.4, 0.4),
   lightDir: Vec3 = vec3(-1, -1, -1).normalize,
@@ -67,5 +75,17 @@ proc draw3dShapeShadedByNormalsSingleSide*(
 
   ctx.withPushPopIf blendRgbx, color.a != 1 or shadowColor.a != 1:
     useAndPassUniforms shader
-    draw shape
+    draw mesh
+
+
+proc draw3dShapeShadedByNormalsSingleSide*(
+  ctx: DrawContext,
+  shape: Mesh,
+  color: Color = color(1, 1, 1),
+  shadowColor: Color = color(0.4, 0.4, 0.4),
+  lightDir: Vec3 = vec3(-1, -1, -1).normalize,
+  backlight: float = 0.6,
+  transform: Mat4 = mat4(),
+) {.deprecated: "renamed to fill3dMeshShadedByNormalsSingleSide".} =
+  fill3dMeshShadedByNormalsSingleSide(ctx, shape, color, shadowColor, lightDir, backlight, transform)
 

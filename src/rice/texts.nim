@@ -11,7 +11,7 @@ type
     font: Font
 
 
-proc ensureMeshes(buffer: var GlyphMeshBuffer, rune: Rune, typeface: Typeface, pixelScale: float32) =
+proc ensureMesh(buffer: var GlyphMeshBuffer, rune: Rune, typeface: Typeface, pixelScale: float32) =
   if rune notin buffer.meshes:
     buffer.meshes[rune] = typeface.getGlyphPath(rune).toMeshes(pixelScale)
 
@@ -66,9 +66,8 @@ proc fastDrawRune*(
     translate(vec3(baseline.x, baseline.y, 0)) *
     scale(vec3(fontScale * ctx.px.x, -(fontScale * ctx.px.y), 1))
 
-  context.meshFamily[].ensureMeshes(rune, typeface, pixelScale)
-  for mesh in context.meshFamily[].meshes[rune]:
-    draw mesh
+  context.meshFamily[].ensureMesh(rune, typeface, pixelScale)
+  draw context.meshFamily[].meshes[rune]
 
 
 proc drawText*(

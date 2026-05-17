@@ -89,8 +89,8 @@ test "basic":
       )
 
       ctx.withFaceCulling back:
-        ctx.draw3dShapeFlat(
-          shape = lever_mechanism,
+        ctx.fill3dMeshFlat(
+          mesh = lever_mechanism,
           color = color(0.3, 0.79, 1),
           transform = combine(
             rotateX(float32 Pi / 2),
@@ -102,8 +102,8 @@ test "basic":
         # todo: create outline by extruding points along normals and connecting resulting triangles/quads
         # todo: post-processing outline
 
-      ctx.draw3dShapeShadedByNormalsSingleSide(
-        shape = lever_mechanism,
+      ctx.fill3dMeshShadedByNormalsSingleSide(
+        mesh = lever_mechanism,
         # color = color(0.3, 0.79, 1).lighten(0.1),
         # shadowColor = color(0.4, 0.4, 0.4),
         lightDir = vec3(-0.5, -0.5, 1),

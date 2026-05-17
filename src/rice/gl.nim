@@ -252,7 +252,7 @@ proc newMesh*[T](vert: openarray[T], kind = GlTriangles): Mesh =
 
 
 proc draw*(x: Mesh, kind: GLenum = x.kind) =
-  assert x.len != 0, "trying to draw empty mesh, probably uninitialized"
+  if x.len == 0: return
   withVertexArray x.vao[0]:
     if hasIndices in x.flags:
       glDrawElements(kind, x.len.GlSizei, GlUnsignedInt, nil)

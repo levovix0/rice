@@ -87,13 +87,38 @@ proc slice(poly: Polygon, i, j: int): (Polygon, Polygon) =
 
   (p1, p2)
 
-proc isConvex(poly: Polygon): bool =
+proc signedArea(poly: Polygon): float32 =
+  ## Positive for counter-clockwise, negative for clockwise.
   for i in 0..<poly.len:
-    if isReflex(poly, i):
-      return false
-  return true
+    let j = (i + 1) mod poly.len
+    result += poly[i].x * poly[j].y - poly[j].x * poly[i].y
+  result *= 0.5
 
-proc decompose(poly: Polygon, result: var seq[Polygon]) =
+
+proc fanTriangulate(poly: Polygon, result: var seq[Vec2]) =
+  ## Converts a (convex or semi-convex) polygon into GL_TRIANGLES points
+  let n = poly.len
+  # After bridging holes, the polygon may have a "dent" at the bridge seam, so
+  # fanning from vertex 0 can produce wrongly-wound triangles. Find the first
+  # vertex from which every fan triangle has the same sign as the polygon area.
+  let wantPos = signedArea(poly) >= 0
+  var start = 0
+  block findStart:
+    for i in 0..<n:
+      var ok = true
+      for k in 1..<n - 1:
+        let a = area(poly[i], poly[(i + k) mod n], poly[(i + k + 1) mod n])
+        if wantPos and a < 0: ok = false; break
+        if not wantPos and a > 0: ok = false; break
+      if ok: start = i; break findStart
+  for i in 1..<n - 1:
+    result.add poly[start]
+    result.add poly[(start + i) mod n]
+    result.add poly[(start + i + 1) mod n]
+
+proc decompose(poly: Polygon, result: var seq[Vec2]) =
+  ## Bayazit decomposition emitting GL_TRIANGLES vertices directly
+  ## https://github.com/Crackshell/bayazit.h
   for i in 0..<poly.len:
     if isReflex(poly, i):
       var bestJ = -1
@@ -112,66 +137,12 @@ proc decompose(poly: Polygon, result: var seq[Polygon]) =
         decompose(p2, result)
         return
 
-  result.add(poly)
+  fanTriangulate(poly, result)
 
-proc toConvexHulls*(poly: Polygon): seq[Polygon] =
-  ## splits polygon of arbitrary shape into pieces, drawable corretly via GL_TRIANGLE_FAN
-  ## uses Bayazit algorithm https://github.com/Crackshell/bayazit.h
-  result = @[]
+proc toTriangles*(poly: Polygon): seq[Vec2] =
+  ## Triangulates an arbitrary polygon, returns GL_TRIANGLE vertex list (3 vertices per triangle)
   if poly.len < 3: return
-  if isConvex(poly): return @[poly]
   decompose(poly, result)
-
-
-proc toConvexHulls*(
-  path: Path,
-  pixelScale: float = 1,  # the less pixelScale are, the less points are created for triangulation
-): seq[Polygon] =
-  ## triangulates path on CPU
-  for shape in pixiePaths.commandsToShapes(path, true, pixelScale):
-    result.add shape.toConvexHulls
-
-proc toConvexHullsStroke*(
-  path: Path,
-  strokeWidth: float32,
-  lineCap: LineCap,
-  lineJoin: LineJoin,
-  miterLimit: float32 = defaultMiterLimit,
-  dashes: seq[float32] = @[],
-  pixelScale: float = 1,  # the less pixelScale are, the less points are created for triangulation
-): seq[Polygon] =
-  ## triangulates stroke of the path on CPU
-  for shape in pixiePaths.strokeShapes(path.commandsToShapes(true, pixelScale), strokeWidth, lineCap, lineJoin, miterLimit, dashes, pixelScale):
-    result.add shape.toConvexHulls
-
-
-proc signedArea*(poly: Polygon): float32 =
-  ## Positive = CCW (counter-clockwise), negative = CW.
-  for i in 0..<poly.len:
-    let j = (i + 1) mod poly.len
-    result += poly[i].x * poly[j].y - poly[j].x * poly[i].y
-  result *= 0.5f32
-
-
-proc fanStart(poly: Polygon): int =
-  ## Returns the vertex index from which GL_TRIANGLE_FAN covers the polygon without artifacts.
-  ## For a convex polygon any vertex works; this handles near-degenerate cases from bridging.
-  let n = poly.len
-  if n < 3: return 0
-  let wantPos = signedArea(poly) >= 0
-  for i in 0..<n:
-    var ok = true
-    for k in 1..<n - 1:
-      let a = area(poly[i], poly[(i + k) mod n], poly[(i + k + 1) mod n])
-      if wantPos and a < 0: ok = false; break
-      if not wantPos and a > 0: ok = false; break
-    if ok: return i
-  return 0
-
-proc rotatePoly(poly: Polygon, start: int): Polygon =
-  result = newSeqOfCap[Vec2](poly.len)
-  for k in 0..<poly.len:
-    result.add poly[(start + k) mod poly.len]
 
 
 proc bridgeHole*(outer: Polygon, hole: Polygon): Polygon =
@@ -273,25 +244,16 @@ proc removeHoles*(contours: seq[Polygon]): seq[Polygon] =
       result.add polys[i]
 
 
-proc decomposeConvex*(path: Path, pixelScale: float = 1): seq[Polygon] =
-  ## Returns convex polygons covering the filled area of path, holes handled correctly.
-  var contours: seq[Polygon]
-  for shape in pixiePaths.commandsToShapes(path, true, pixelScale):
-    contours.add shape
-  for poly in contours.removeHoles():
-    for convex in poly.toConvexHulls():
-      result.add rotatePoly(convex, fanStart(convex))
-
-
 proc toMeshes*(
   path: Path,
-  pixelScale: float = 1,  # the less pixelScale are, the less points are created for triangulation
-): seq[Mesh] =
-  ## triangulates path, sends it to GPU; handles holes in contours correctly
-  let shapes = pixiePaths.commandsToShapes(path, true, pixelScale)
-  for poly in shapes.removeHoles():
-    for convexShape in poly.toConvexHulls:
-      result.add newMesh(rotatePoly(convexShape, fanStart(convexShape)), GL_TRIANGLE_FAN)
+  pixelScale: float = 1,
+): Mesh =
+  ## triangulates path into a single GL_TRIANGLES mesh; handles holes correctly
+  var verts: seq[Vec2]
+  for poly in pixiePaths.commandsToShapes(path, true, pixelScale).removeHoles():
+    verts.add poly.toTriangles()
+  if verts.len > 0:
+    result = newMesh(verts, GL_TRIANGLES)
 
 
 proc toStrokeMeshes*(
@@ -301,18 +263,19 @@ proc toStrokeMeshes*(
   lineJoin: LineJoin,
   miterLimit: float32 = defaultMiterLimit,
   dashes: seq[float32] = @[],
-  pixelScale: float = 1,  # the less pixelScale are, the less points are created for triangulation
-): seq[Mesh] =
-  ## triangulates stroke of the path, sends it to GPU
-  let shapes = pixiePaths.strokeShapes(path.commandsToShapes(true, pixelScale), strokeWidth, lineCap, lineJoin, miterLimit, dashes, pixelScale)
-  for shape in shapes:
-    for convexShape in shape.toConvexHulls:
-      result.add newMesh(rotatePoly(convexShape, fanStart(convexShape)), GL_TRIANGLE_FAN)
+  pixelScale: float = 1,
+): Mesh =
+  ## triangulates stroke of the path into a single GL_TRIANGLES mesh
+  var verts: seq[Vec2]
+  for shape in pixiePaths.strokeShapes(path.commandsToShapes(true, pixelScale), strokeWidth, lineCap, lineJoin, miterLimit, dashes, pixelScale):
+    verts.add shape.toTriangles()
+  if verts.len > 0:
+    result = newMesh(verts, GL_TRIANGLES)
 
 
-proc drawWithSolidColor*(
+proc fill2dMeshFlat*(
   ctx: DrawContext,
-  meshes: openArray[Mesh],
+  mesh: Mesh,
   color: Color,
   transform = mat4(),
 ) =
@@ -323,16 +286,14 @@ proc drawWithSolidColor*(
       var ipos {.inp.}: Vec2
 
       gl_Position = @(transform) * vec4(ipos.xy, vec2(0, 1))
-    
+
     proc frag =
       var glCol {.outGl.}: Vec4
-      
+
       glCol = @(color.vec4)
 
   useAndPassUniforms shader
-  
-  for mesh in meshes:
-    draw mesh
+  draw mesh
 
 
 proc fillPath*(
@@ -342,8 +303,7 @@ proc fillPath*(
   transform = mat4(),
   pixelScale: float = 1,
 ) =
-  drawWithSolidColor(ctx, path.toMeshes(pixelScale), color, transform)
-
+  fill2dMeshFlat(ctx, path.toMeshes(pixelScale), color, transform)
 
 
 proc strokePath*(
@@ -358,7 +318,7 @@ proc strokePath*(
   dashes: seq[float32] = @[],
   pixelScale: float = 1,
 ) =
-  drawWithSolidColor(ctx, path.toStrokeMeshes(strokeWidth, lineCap, lineJoin, miterLimit, dashes, pixelScale), color, transform)
+  fill2dMeshFlat(ctx, path.toStrokeMeshes(strokeWidth, lineCap, lineJoin, miterLimit, dashes, pixelScale), color, transform)
 
 
 

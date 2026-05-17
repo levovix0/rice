@@ -36,7 +36,7 @@ type  # for the ./texts module
     typefaceId*: int
 
   GlyphMeshBuffer* = object
-    meshes*: Table[Rune, seq[Mesh]]
+    meshes*: Table[Rune, Mesh]
 
 
 type

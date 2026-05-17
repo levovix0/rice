@@ -23,9 +23,9 @@ const palette = [
 
 type
   DisplayMode = enum
-    Solid        ## filled GL_TRIANGLE_FAN, white color
-    Filled       ## filled GL_TRIANGLE_FAN, one colour per convex piece
-    ConvexLines  ## convex-hull piece outlines (GL_LINE_LOOP)
+    Solid        ## single GL_TRIANGLES mesh per glyph, white
+    Filled       ## one colour per triangle (GL_TRIANGLES)
+    TriangleWire ## triangle wireframe (GL_LINE_LOOP per triangle)
     MergedLines  ## polygon outlines after removeHoles (GL_LINE_LOOP)
     RawLines     ## raw commandsToShapes contour outlines (GL_LINE_LOOP)
 
@@ -45,7 +45,7 @@ test "font holes":
 
   let font = newFont(typeface)
   font.size = 80
-  
+
   let smallerFont = newFont(typeface)
   smallerFont.size = 32
 
@@ -65,10 +65,11 @@ test "font holes":
   const textY      = 5f32
   const pixelScale = 1f32
 
-  var filledPieces = newSeq[seq[GlyphPiece]](arrangement.runes.len)
-  var convexPieces = newSeq[seq[GlyphPiece]](arrangement.runes.len)
-  var mergedPieces = newSeq[seq[GlyphPiece]](arrangement.runes.len)
-  var rawPieces    = newSeq[seq[GlyphPiece]](arrangement.runes.len)
+  var solidMeshes    = newSeq[Mesh](arrangement.runes.len)
+  var trianglePieces = newSeq[seq[GlyphPiece]](arrangement.runes.len)
+  var wirePieces     = newSeq[seq[GlyphPiece]](arrangement.runes.len)
+  var mergedPieces   = newSeq[seq[GlyphPiece]](arrangement.runes.len)
+  var rawPieces      = newSeq[seq[GlyphPiece]](arrangement.runes.len)
 
   for i, rune in arrangement.runes:
     let selRect = arrangement.selectionRects[i]
@@ -80,8 +81,8 @@ test "font holes":
 
     let path = typeface.getGlyphPath(rune)
 
-    # Stage 1: raw subpath contours from commandsToShapes
-    var contours = newSeq[Polygon]()
+    # Stage 1: raw subpath contours
+    var contours: seq[Polygon]
     for shape in pixiePaths.commandsToShapes(path, true, pixelScale):
       contours.add shape
     for j, contour in contours:
@@ -96,20 +97,33 @@ test "font holes":
       for v in poly: screenPoly.add toScreen(v)
       mergedPieces[i].add GlyphPiece(mesh: newMesh(screenPoly, GL_LINE_LOOP), colorIdx: j)
 
-    # Stage 3: convex-hull decomposition outlines
-    var k = 0
+    # Stages 3 & 4: triangulate each merged polygon, build wire and filled meshes
+    var triIdx = 0
+    var solidVerts: seq[Vec2]
     for poly in merged:
-      for convex in poly.toConvexHulls():
-        var screenPoly: Polygon
-        for v in convex: screenPoly.add toScreen(v)
-        convexPieces[i].add GlyphPiece(mesh: newMesh(screenPoly, GL_LINE_LOOP), colorIdx: k)
-        inc k
+      let tris = poly.toTriangles()
+      var t = 0
+      while t + 2 < tris.len:
+        let a = toScreen(tris[t])
+        let b = toScreen(tris[t + 1])
+        let c = toScreen(tris[t + 2])
+        # Stage 3: wireframe — one GL_LINE_LOOP per triangle
+        wirePieces[i].add GlyphPiece(
+          mesh: newMesh([a, b, c], GL_LINE_LOOP),
+          colorIdx: triIdx,
+        )
+        # Stage 4: filled — one GL_TRIANGLES mesh per triangle
+        trianglePieces[i].add GlyphPiece(
+          mesh: newMesh([a, b, c], GL_TRIANGLES),
+          colorIdx: triIdx,
+        )
+        solidVerts.add [a, b, c]
+        inc triIdx
+        inc t, 3
 
-    # Stage 4: filled triangles (final rendering)
-    for j, convex in path.decomposeConvex(pixelScale):
-      var screenPoly: Polygon
-      for v in convex: screenPoly.add toScreen(v)
-      filledPieces[i].add GlyphPiece(mesh: newMesh(screenPoly, GL_TRIANGLE_FAN), colorIdx: j)
+    # Solid: single GL_TRIANGLES mesh for the whole glyph
+    if solidVerts.len > 0:
+      solidMeshes[i] = newMesh(solidVerts, GL_TRIANGLES)
 
   var mode = Solid
 
@@ -137,21 +151,27 @@ test "font holes":
         scale(vec3(zoom)),
       )
 
-      let src =
-        case mode
-        of Solid:       addr filledPieces
-        of Filled:      addr filledPieces
-        of ConvexLines: addr convexPieces
-        of MergedLines: addr mergedPieces
-        of RawLines:    addr rawPieces
+      case mode
+      of Solid:
+        for mesh in solidMeshes:
+          ctx.fill2dMeshFlat(mesh, color(1, 1, 1))
+      of Filled:
+        for glyphPieces in trianglePieces:
+          for p in glyphPieces:
+            ctx.fill2dMeshFlat(p.mesh, palette[p.colorIdx mod palette.len])
+      of TriangleWire:
+        for glyphPieces in wirePieces:
+          for p in glyphPieces:
+            ctx.fill2dMeshFlat(p.mesh, palette[p.colorIdx mod palette.len])
+      of MergedLines:
+        for glyphPieces in mergedPieces:
+          for p in glyphPieces:
+            ctx.fill2dMeshFlat(p.mesh, palette[p.colorIdx mod palette.len])
+      of RawLines:
+        for glyphPieces in rawPieces:
+          for p in glyphPieces:
+            ctx.fill2dMeshFlat(p.mesh, palette[p.colorIdx mod palette.len])
 
-      for glyphPieces in src[]:
-        for p in glyphPieces:
-          if mode == Solid:
-            ctx.drawWithSolidColor([p.mesh], color(1, 1, 1))
-          else:
-            ctx.drawWithSolidColor([p.mesh], palette[p.colorIdx mod palette.len])
-    
       ctx.drawText(
         pos = vec3(0, -0.7, 0),
         arrangement = typeset(smallerFont, "mode: " & $mode),
@@ -159,7 +179,7 @@ test "font holes":
         origin = vec2(0.5, 0),
         transform = ctx.glToViewportMatrix,
       )
-    
+
       ctx.drawText(
         pos = vec3(0, -0.85, 0),
         arrangement = typeset(smallerFont, "press `space` to switch rendering mode"),
@@ -171,4 +191,3 @@ test "font holes":
   addCameraMovement(win, pos, rot, zoom)
 
   run win
-
