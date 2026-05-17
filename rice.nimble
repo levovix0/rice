@@ -1,4 +1,4 @@
-version       = "0.1.1"
+version       = "0.1.2"
 author        = "levovix0"
 description   = "2D GPU rendering library for graphical interfaces"
 license       = "MIT"
