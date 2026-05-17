@@ -244,7 +244,7 @@ proc removeHoles*(contours: seq[Polygon]): seq[Polygon] =
       result.add polys[i]
 
 
-proc toMeshes*(
+proc toMesh*(
   path: Path,
   pixelScale: float = 1,
 ): Mesh =
@@ -255,8 +255,14 @@ proc toMeshes*(
   if verts.len > 0:
     result = newMesh(verts, GL_TRIANGLES)
 
+proc toMeshes*(
+  path: Path,
+  pixelScale: float = 1,
+): seq[Mesh] {.deprecated: "use toMesh instead".} =
+  @[toMesh(path, pixelScale)]
 
-proc toStrokeMeshes*(
+
+proc toStrokeMesh*(
   path: Path,
   strokeWidth: float32,
   lineCap: LineCap,
@@ -271,6 +277,17 @@ proc toStrokeMeshes*(
     verts.add shape.toTriangles()
   if verts.len > 0:
     result = newMesh(verts, GL_TRIANGLES)
+
+proc toStrokeMeshes*(
+  path: Path,
+  strokeWidth: float32,
+  lineCap: LineCap,
+  lineJoin: LineJoin,
+  miterLimit: float32 = defaultMiterLimit,
+  dashes: seq[float32] = @[],
+  pixelScale: float = 1,
+): seq[Mesh] {.deprecated: "use toStrokeMesh instead".} =
+  @[toStrokeMesh(path, strokeWidth, lineCap, lineJoin, miterLimit, dashes, pixelScale)]
 
 
 proc fill2dMeshFlat*(
@@ -295,6 +312,15 @@ proc fill2dMeshFlat*(
   useAndPassUniforms shader
   draw mesh
 
+proc drawWithSolidColor*(
+  ctx: DrawContext,
+  meshes: openarray[Mesh],
+  color: Color,
+  transform = mat4(),
+) {.deprecated: "use fill2dMeshFlat instead".} =
+  for mesh in meshes:
+    fill2dMeshFlat(ctx, mesh, color, transform)
+
 
 proc fillPath*(
   ctx: DrawContext,
@@ -303,7 +329,7 @@ proc fillPath*(
   transform = mat4(),
   pixelScale: float = 1,
 ) =
-  fill2dMeshFlat(ctx, path.toMeshes(pixelScale), color, transform)
+  fill2dMeshFlat(ctx, path.toMesh(pixelScale), color, transform)
 
 
 proc strokePath*(
@@ -318,7 +344,7 @@ proc strokePath*(
   dashes: seq[float32] = @[],
   pixelScale: float = 1,
 ) =
-  fill2dMeshFlat(ctx, path.toStrokeMeshes(strokeWidth, lineCap, lineJoin, miterLimit, dashes, pixelScale), color, transform)
+  fill2dMeshFlat(ctx, path.toStrokeMesh(strokeWidth, lineCap, lineJoin, miterLimit, dashes, pixelScale), color, transform)
 
 
 

@@ -13,7 +13,7 @@ type
 
 proc ensureMesh(buffer: var GlyphMeshBuffer, rune: Rune, typeface: Typeface, pixelScale: float32) =
   if rune notin buffer.meshes:
-    buffer.meshes[rune] = typeface.getGlyphPath(rune).toMeshes(pixelScale)
+    buffer.meshes[rune] = typeface.getGlyphPath(rune).toMesh(pixelScale)
 
 
 proc glyphFamily(font: Font): GlyphMeshFamilyKey =
