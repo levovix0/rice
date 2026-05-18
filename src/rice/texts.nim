@@ -50,10 +50,26 @@ proc endTextDrawing*(ctx: DrawContext) =
 proc fastDrawRune*(
   ctx: DrawContext,
   rune: Rune,
-  rect: Rect,
+  textPos: Vec2,
+  textToGl: Mat4,
   context: var TextDrawContext,
   pixelScale: float32 = 1/10,
 ) =
+  context.transform.uniform =
+    textToGl *
+    translate(vec3(textPos.x, textPos.y, 0))
+
+  context.meshFamily[].ensureMesh(rune, context.font.typeface, pixelScale)
+  draw context.meshFamily[].meshes[rune]
+
+
+proc fastDrawRune*(
+  ctx: DrawContext,
+  rune: Rune,
+  rect: Rect,
+  context: var TextDrawContext,
+  pixelScale: float32 = 1/10,
+) {.deprecated: "use ctx.fastDrawRune(Rune, Vec2, Mat4, ...) instead".} =
   let typeface = context.font.typeface
   let fontScale = context.font.size / typeface.scale
   let ascentPx = round((typeface.ascent + typeface.lineGap / 2) * fontScale)
@@ -79,24 +95,31 @@ proc drawText*(
   exactBoundaries = false,
   transform = mat4(),
   pixelScale: float32 = 1/10,
+  axisYUp = true,
 ) =
+  ## transform is applied in text-local space (rotate/scale around text origin), then translated to pos.
   if arrangement == nil or arrangement.fonts.len == 0:
     return
 
   var context = ctx.startTextDrawing(arrangement.fonts[0])
   context.color.uniform = color
-
-  let pos = ctx.viewportToGlMatrix * transform * pos
+  
   let box = arrangement.computeBounds()
+  var offset =
+    if exactBoundaries: -(box.xy + box.wh * origin)
+    else: -(box.xy + box.wh) * origin
+  if axisYUp: offset.y = -offset.y
 
-  let offset =
-    if exactBoundaries: vec2(box.x, -box.y) * ctx.px + vec2(box.w, -box.h) * origin * ctx.px
-    else: vec2(box.w + box.x, -(box.h + box.y)) * origin * ctx.px
+  let textToGl =
+    ctx.viewportToGlMatrix *
+    translate(pos) *
+    transform *
+    translate((offset).vec3(0)) *
+    scale((1/context.font.typeface.scale).vec3) *
+    scale(context.font.size.vec3) *
+    scale(vec3(1, (if axisYUp: -1 else: 1), 1))
 
   for i, rune in arrangement.runes:
-    var rect = arrangement.selectionRects[i]
-    rect.wh = rect.wh + vec2(2, 2)
-
-    ctx.fastDrawRune(rune, rect(pos.xy + vec2(rect.x, -rect.y) * ctx.px - offset, rect.wh), context, pixelScale)
+    ctx.fastDrawRune(rune, arrangement.positions[i] * (context.font.typeface.scale / context.font.size), textToGl, context, pixelScale)
 
   ctx.endTextDrawing()

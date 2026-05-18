@@ -139,8 +139,8 @@ test "graph maker":
       translate(pos),
       rot,
       scale(vec3(zoom)),
-      scale(vec3(vh / vw, 1, 1/1000))
     )
+    ctx.projection = scale(vec3(vh / vw, 1, 1/1000))
 
     for edge in scene.edges:
       ctx.drawLine(
@@ -148,7 +148,7 @@ test "graph maker":
         b = scene.nodes[edge.b].pos,
         color = color(1, 1, 1, 1) * 0.3,
         thickness = 2 * ctx.px.x / zoom,
-        normal = ctx.viewportToGlMatrix.inverse * vec3(0, 0, 1)
+        normal = ctx.glToViewportMatrix * vec3(0, 0, 1)
       )
     
     for node in scene.nodes:
@@ -168,17 +168,18 @@ test "graph maker":
         arrangement = typeset(font, node.name),
         color = color(1, 1, 1, 1).vec4,
         origin = vec2(0.5, -0.2),
+        transform = ctx.glToViewportMatrix.mat3.mat4 * scale(2/vw, 2/vh),
       )
       glEnable(GL_DEPTH_TEST)
 
 
     glDisable(GL_DEPTH_TEST)
     ctx.drawText(
-      pos = vec3(0, -1, 0),
+      pos = ctx.glToViewportMatrix * vec3(0, -1, 0),
       arrangement = typeset(font2, "hold `space` to advance simulation"),
       color = color(0.5, 0.5, 0.5, 1).vec4,
       origin = vec2(0.5, 2),
-      transform = ctx.glToViewportMatrix,
+      transform = ctx.glToViewportMatrix.mat3.mat4 * scale(2/vw, 2/vh),
     )
     glEnable(GL_DEPTH_TEST)
   

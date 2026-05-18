@@ -144,48 +144,53 @@ test "font holes":
 
       let (vw, vh) = (e.window.size.x.float32, e.window.size.y.float32)
       ctx.viewport = combine(
-        scale(2f32 / vw, -2f32 / vh, 1/1000),
-        translate(-1f32, 1f32),
         translate(pos),
         rot,
         scale(vec3(zoom)),
       )
+      ctx.projection = combine(
+        scale(2/vw, -2/vh, 1/1000)
+      )
+
+      let textTransform = translate(vec3(-vw/2, -vh/2, 0))
 
       case mode
       of Solid:
         for mesh in solidMeshes:
-          ctx.fill2dMeshFlat(mesh, color(1, 1, 1))
+          ctx.fill2dMeshFlat(mesh, color(1, 1, 1), textTransform)
       of Filled:
         for glyphPieces in trianglePieces:
           for p in glyphPieces:
-            ctx.fill2dMeshFlat(p.mesh, palette[p.colorIdx mod palette.len])
+            ctx.fill2dMeshFlat(p.mesh, palette[p.colorIdx mod palette.len], textTransform)
       of TriangleWire:
         for glyphPieces in wirePieces:
           for p in glyphPieces:
-            ctx.fill2dMeshFlat(p.mesh, palette[p.colorIdx mod palette.len])
+            ctx.fill2dMeshFlat(p.mesh, palette[p.colorIdx mod palette.len], textTransform)
       of MergedLines:
         for glyphPieces in mergedPieces:
           for p in glyphPieces:
-            ctx.fill2dMeshFlat(p.mesh, palette[p.colorIdx mod palette.len])
+            ctx.fill2dMeshFlat(p.mesh, palette[p.colorIdx mod palette.len], textTransform)
       of RawLines:
         for glyphPieces in rawPieces:
           for p in glyphPieces:
-            ctx.fill2dMeshFlat(p.mesh, palette[p.colorIdx mod palette.len])
+            ctx.fill2dMeshFlat(p.mesh, palette[p.colorIdx mod palette.len], textTransform)
 
       ctx.drawText(
-        pos = vec3(0, -0.7, 0),
+        pos = ctx.viewportMatrix.inverse * vec3(0, vh/2 - 100, 0),
         arrangement = typeset(smallerFont, "mode: " & $mode),
         color = color(0.5, 0.5, 1, 1).vec4,
         origin = vec2(0.5, 0),
-        transform = ctx.glToViewportMatrix,
+        axisYUp = false,
+        transform = ctx.viewportMatrix.mat3.mat4.inverse,
       )
 
       ctx.drawText(
-        pos = vec3(0, -0.85, 0),
+        pos = ctx.viewportMatrix.inverse * vec3(0, vh/2 - 50, 0),
         arrangement = typeset(smallerFont, "press `space` to switch rendering mode"),
         color = color(0.5, 0.5, 0.5, 1).vec4,
         origin = vec2(0.5, 0),
-        transform = ctx.glToViewportMatrix,
+        axisYUp = false,
+        transform = ctx.viewportMatrix.mat3.mat4.inverse,
       )
 
   addCameraMovement(win, pos, rot, zoom)
