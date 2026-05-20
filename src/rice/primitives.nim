@@ -56,6 +56,18 @@ proc circleShape(t: float32, radius: float32, center: Vec3, plane: Mat4): Vec4 =
   ## returns points of a circle
   return center.vec4(1) + plane * vec4(vec2(radius, 0).rotate(t * (PI * 2)), vec2(0, 0))
 
+proc capsuleShape(t: float32, a, b, dir, perp: Vec3, radius: float32): Vec4 =
+  ## returns points of a capsule outline (segment with round caps)
+  ## t in [0, 0.5) — semicircle around a, t in [0.5, 1) — semicircle around b
+  var pos: Vec3
+  if t < 0.5:
+    let angle = float32 PI/2 + t * (PI * 2)
+    pos = a + radius * (cos(angle) * dir + sin(angle) * perp)
+  else:
+    let angle = float32 -(PI/2) + (t - 0.5) * (PI * 2)
+    pos = b + radius * (cos(angle) * dir + sin(angle) * perp)
+  return vec4(pos, 1)
+
 
 
 # --- Line ---
@@ -339,6 +351,88 @@ proc fillCircle*(
   useAndPassUniforms shader
   draw ctx.emptyMesh(GL_TRIANGLE_FAN, pointCount)
 
+
+
+
+# --- Capsule (round line) ---
+
+proc fillCapsule*(
+  ctx: DrawContext,
+  color: Color,
+  a = vec3(0, 0, 0), b = vec3(1, 0, 0),
+  radius: float32 = 0.5,
+  normal = vec3(0, 0, 1), transform = mat4(),
+  pointCount: int = 32,
+) =
+  let transform = ctx.viewportToGlMatrix * transform
+  let dir = normalize(b - a)
+  let perp = cross(normal, dir)
+
+  let shader = ctx.makeShader:
+    proc vert =
+      gl_Position = @(transform) * capsuleShape(
+        gl_VertexID.float32 / @(pointCount.float32),
+        @(a), @(b), @(dir.Vec3), @(perp.Vec3), @(radius)
+      )
+
+    proc frag =
+      var glCol {.outGl.}: Vec4 = @(color.vec4)
+
+  useAndPassUniforms shader
+  draw ctx.emptyMesh(GL_TRIANGLE_FAN, pointCount)
+
+
+proc drawCapsule*(
+  ctx: DrawContext,
+  color: Color,
+  a = vec3(0, 0, 0), b = vec3(1, 0, 0),
+  radius: float32 = 0.5,
+  normal = vec3(0, 0, 1), transform = mat4(),
+  pointCount: int = 32,
+) =
+  let transform = ctx.viewportToGlMatrix * transform
+  let dir = normalize(b - a)
+  let perp = cross(normal, dir)
+
+  let shader = ctx.makeShader:
+    proc vert =
+      gl_Position = @(transform) * capsuleShape(
+        gl_VertexID.float32 / @(pointCount.float32),
+        @(a), @(b), @(dir.Vec3), @(perp.Vec3), @(radius)
+      )
+
+    proc frag =
+      var glCol {.outGl.}: Vec4 = @(color.vec4)
+
+  useAndPassUniforms shader
+  draw ctx.emptyMesh(GL_LINE_LOOP, pointCount)
+
+
+proc drawCapsule*(
+  ctx: DrawContext,
+  color: Color, thickness: float32,
+  a = vec3(0, 0, 0), b = vec3(1, 0, 0),
+  radius: float32 = 0.5,
+  normal = vec3(0, 0, 1), transform = mat4(),
+  pointCount: int = 32,
+) =
+  let transform = ctx.viewportToGlMatrix * transform
+  let dir = normalize(b - a)
+  let perp = cross(normal, dir)
+
+  let shader = ctx.makeShader:
+    proc vert =
+      let thk = (gl_VertexID.float32 mod 2) * @(thickness)
+      gl_Position = @(transform) * capsuleShape(
+        (gl_VertexID.float32 / 2).floor / @(pointCount.float32),
+        @(a), @(b), @(dir.Vec3), @(perp.Vec3), @(radius) - thk
+      )
+
+    proc frag =
+      var glCol {.outGl.}: Vec4 = @(color.vec4)
+
+  useAndPassUniforms shader
+  draw ctx.emptyMesh(GL_TRIANGLE_STRIP, pointCount * 2 + 2)
 
 
 
