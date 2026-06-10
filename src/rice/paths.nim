@@ -264,9 +264,9 @@ proc toMeshes*(
 
 proc toStrokeMesh*(
   path: Path,
-  strokeWidth: float32,
-  lineCap: LineCap,
-  lineJoin: LineJoin,
+  strokeWidth: float32 = 1.0,
+  lineCap = ButtCap,
+  lineJoin = MiterJoin,
   miterLimit: float32 = defaultMiterLimit,
   dashes: seq[float32] = @[],
   pixelScale: float = 1,
