@@ -10,6 +10,8 @@ proc fillHatching*(
   l1, l2: float32,
   transform: Mat4 = mat4()
 ) =
+  let transform = ctx.viewportToGlMatrix * transform
+
   let shader = ctx.makeShader:
     proc vert =
       var pos {.inp.}: Vec3
@@ -20,9 +22,9 @@ proc fillHatching*(
     proc frag =
       var glCol {.outGl.}: Vec4
       if uv.dot(@(dir.normalize.Vec3)) mod (@(l1) + @(l2)) > @(l1):
-        glCol = @(color1.vec4)
-      else:
         glCol = @(color2.vec4)
+      else:
+        glCol = @(color1.vec4)
 
   useAndPassUniforms shader
   draw mesh
