@@ -255,12 +255,6 @@ proc toMesh*(
   if verts.len > 0:
     result = newMesh(verts, GL_TRIANGLES)
 
-proc toMeshes*(
-  path: Path,
-  pixelScale: float = 1,
-): seq[Mesh] {.deprecated: "use toMesh instead".} =
-  @[toMesh(path, pixelScale)]
-
 
 proc toStrokeMesh*(
   path: Path,
@@ -277,17 +271,6 @@ proc toStrokeMesh*(
     verts.add shape.toTriangles()
   if verts.len > 0:
     result = newMesh(verts, GL_TRIANGLES)
-
-proc toStrokeMeshes*(
-  path: Path,
-  strokeWidth: float32,
-  lineCap: LineCap,
-  lineJoin: LineJoin,
-  miterLimit: float32 = defaultMiterLimit,
-  dashes: seq[float32] = @[],
-  pixelScale: float = 1,
-): seq[Mesh] {.deprecated: "use toStrokeMesh instead".} =
-  @[toStrokeMesh(path, strokeWidth, lineCap, lineJoin, miterLimit, dashes, pixelScale)]
 
 
 proc fill2dMeshFlat*(
@@ -311,15 +294,6 @@ proc fill2dMeshFlat*(
 
   useAndPassUniforms shader
   draw mesh
-
-proc drawWithSolidColor*(
-  ctx: DrawContext,
-  meshes: openarray[Mesh],
-  color: Color,
-  transform = mat4(),
-) {.deprecated: "use fill2dMeshFlat instead".} =
-  for mesh in meshes:
-    fill2dMeshFlat(ctx, mesh, color, transform)
 
 
 proc fillPath*(

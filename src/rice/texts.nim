@@ -63,29 +63,6 @@ proc fastDrawRune*(
   draw context.meshFamily[].meshes[rune]
 
 
-proc fastDrawRune*(
-  ctx: DrawContext,
-  rune: Rune,
-  rect: Rect,
-  context: var TextDrawContext,
-  pixelScale: float32 = 1/10,
-) {.deprecated: "use ctx.fastDrawRune(Rune, Vec2, Mat4, ...) instead".} =
-  let typeface = context.font.typeface
-  let fontScale = context.font.size / typeface.scale
-  let ascentPx = round((typeface.ascent + typeface.lineGap / 2) * fontScale)
-
-  # baseline position in GL clip space: rect.xy is top-left of selection rect
-  let baseline = vec2(rect.x, rect.y - ascentPx * ctx.px.y)
-
-  # convert from font-unit space (y-down, baseline at 0) to GL clip space (y-up)
-  context.transform.uniform =
-    translate(vec3(baseline.x, baseline.y, 0)) *
-    scale(vec3(fontScale * ctx.px.x, -(fontScale * ctx.px.y), 1))
-
-  context.meshFamily[].ensureMesh(rune, typeface, pixelScale)
-  draw context.meshFamily[].meshes[rune]
-
-
 proc drawText*(
   ctx: DrawContext,
   pos: Vec3,
