@@ -1,7 +1,7 @@
 import pkg/[siwin, vmath]
 
 
-template addCameraMovement*(win: Window, pos: var Vec3, rot: var Mat4, zoom: var float32) =
+template addCameraMovement*(win: Window, pos: var Vec3, rot: var Mat4, zoom: var float32, axisYUp: bool = true) =
   var mpos = vec2()
   win.eventsHandler.onMouseButton = proc(e: MouseButtonEvent) =
     mpos = e.window.mouse.pos
@@ -10,12 +10,12 @@ template addCameraMovement*(win: Window, pos: var Vec3, rot: var Mat4, zoom: var
     let d = e.window.mouse.pos - mpos
     let dn = d / vec2(
       e.window.size.x.float32 * (e.window.size.y / e.window.size.x).float32,
-      e.window.size.y.float32
+      (if axisYUp: 1 else: -1) * e.window.size.y.float32
     ) * 2
 
     if e.window.mouse.pressed == {MouseButton.right}:
       let zv = vec2(
-        (-(mpos.y / e.window.size.y.float32 - 0.5)).clamp(-1, 1) / 2,
+        ((if axisYUp: -1 else: 1) * (mpos.y / e.window.size.y.float32 - 0.5)).clamp(-1, 1) / 2,
         ((mpos.x / e.window.size.x.float32 - 0.5) / (e.window.size.y / e.window.size.x).float32).clamp(-1, 1) / 2
       ).normalize
       
@@ -28,7 +28,7 @@ template addCameraMovement*(win: Window, pos: var Vec3, rot: var Mat4, zoom: var
       )
     
     elif e.window.mouse.pressed == {MouseButton.middle}:
-      pos = pos - rot.inverse * vec3(-dn.x, dn.y, 0) / zoom
+      pos = pos - rot.inverse * vec3(dn.x, -dn.y, 0) / zoom
       
     mpos = e.window.mouse.pos
     redraw win
@@ -45,6 +45,6 @@ template addCameraMovement*(win: Window, pos: var Vec3, rot: var Mat4, zoom: var
       e.window.size.y.float32
     ) * 2 * -sd * 0.2 / zoom
     
-    pos = pos - rot.inverse * vec3(-dn.x, dn.y, 0)
+    pos = pos - rot.inverse * vec3(dn.x, (if axisYUp: -1 else: 1) * dn.y, 0)
     redraw win
 

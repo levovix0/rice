@@ -6,6 +6,18 @@ import rice
 import ./camera
 
 
+type
+  DisplayMode = enum
+    Solid        ## single GL_TRIANGLES mesh per glyph, white
+    Filled       ## one colour per triangle (GL_TRIANGLES)
+    TriangleWire ## triangle wireframe (GL_LINE_LOOP per triangle)
+    RawLines     ## raw commandsToShapes contour outlines (GL_LINE_LOOP)
+
+  GlyphPiece = object
+    mesh: Mesh
+    colorIdx: int
+
+
 const palette = [
   color(0.95, 0.30, 0.30),
   color(0.30, 0.85, 0.40),
@@ -21,18 +33,6 @@ const palette = [
   color(0.95, 0.70, 0.50),
 ]
 
-type
-  DisplayMode = enum
-    Solid        ## single GL_TRIANGLES mesh per glyph, white
-    Filled       ## one colour per triangle (GL_TRIANGLES)
-    TriangleWire ## triangle wireframe (GL_LINE_LOOP per triangle)
-    MergedLines  ## polygon outlines after removeHoles (GL_LINE_LOOP)
-    RawLines     ## raw commandsToShapes contour outlines (GL_LINE_LOOP)
-
-  GlyphPiece = object
-    mesh: Mesh
-    colorIdx: int
-
 
 test "font holes":
   let win = newOpenglWindow(size = ivec2(800, 600))
@@ -41,7 +41,10 @@ test "font holes":
   let ctx = newDrawContext()
   var aafb = ctx.newAntialiasedFrameBuffer(win.size)
 
-  let typeface = staticRead("data/Roboto-regular.ttf").static.parseTtf()
+  when defined(test_system_font):
+    let typeface = staticRead("/usr/share/fonts/TTF/Roboto-Regular.ttf").static.parseTtf()
+  else:
+    let typeface = staticRead("data/Roboto-regular.ttf").static.parseTtf()
 
   let font = newFont(typeface)
   font.size = 80
@@ -68,7 +71,6 @@ test "font holes":
   var solidMeshes    = newSeq[Mesh](arrangement.runes.len)
   var trianglePieces = newSeq[seq[GlyphPiece]](arrangement.runes.len)
   var wirePieces     = newSeq[seq[GlyphPiece]](arrangement.runes.len)
-  var mergedPieces   = newSeq[seq[GlyphPiece]](arrangement.runes.len)
   var rawPieces      = newSeq[seq[GlyphPiece]](arrangement.runes.len)
 
   for i, rune in arrangement.runes:
@@ -90,36 +92,29 @@ test "font holes":
       for v in contour: poly.add toScreen(v)
       rawPieces[i].add GlyphPiece(mesh: newMesh(poly, GL_LINE_LOOP), colorIdx: j)
 
-    # Stage 2: after removeHoles — holes bridged into outer polygon
-    let merged = contours.removeHoles()
-    for j, poly in merged:
-      var screenPoly: Polygon
-      for v in poly: screenPoly.add toScreen(v)
-      mergedPieces[i].add GlyphPiece(mesh: newMesh(screenPoly, GL_LINE_LOOP), colorIdx: j)
-
-    # Stages 3 & 4: triangulate each merged polygon, build wire and filled meshes
+    # Stages 2 & 3: triangulate all contours at once (holes handled by winding),
+    # build wire and filled meshes
     var triIdx = 0
     var solidVerts: seq[Vec2]
-    for poly in merged:
-      let tris = poly.toTriangles()
-      var t = 0
-      while t + 2 < tris.len:
-        let a = toScreen(tris[t])
-        let b = toScreen(tris[t + 1])
-        let c = toScreen(tris[t + 2])
-        # Stage 3: wireframe — one GL_LINE_LOOP per triangle
-        wirePieces[i].add GlyphPiece(
-          mesh: newMesh([a, b, c], GL_LINE_LOOP),
-          colorIdx: triIdx,
-        )
-        # Stage 4: filled — one GL_TRIANGLES mesh per triangle
-        trianglePieces[i].add GlyphPiece(
-          mesh: newMesh([a, b, c], GL_TRIANGLES),
-          colorIdx: triIdx,
-        )
-        solidVerts.add [a, b, c]
-        inc triIdx
-        inc t, 3
+    let tris = triangulate(contours)
+    var t = 0
+    while t + 2 < tris.len:
+      let a = toScreen(tris[t])
+      let b = toScreen(tris[t + 1])
+      let c = toScreen(tris[t + 2])
+      # Stage 2: wireframe — one GL_LINE_LOOP per triangle
+      wirePieces[i].add GlyphPiece(
+        mesh: newMesh([a, b, c], GL_LINE_LOOP),
+        colorIdx: triIdx,
+      )
+      # Stage 3: filled — one GL_TRIANGLES mesh per triangle
+      trianglePieces[i].add GlyphPiece(
+        mesh: newMesh([a, b, c], GL_TRIANGLES),
+        colorIdx: triIdx,
+      )
+      solidVerts.add [a, b, c]
+      inc triIdx
+      inc t, 3
 
     # Solid: single GL_TRIANGLES mesh for the whole glyph
     if solidVerts.len > 0:
@@ -164,10 +159,6 @@ test "font holes":
             ctx.fill2dMeshFlat(p.mesh, palette[p.colorIdx mod palette.len], textTransform)
       of TriangleWire:
         for glyphPieces in wirePieces:
-          for p in glyphPieces:
-            ctx.fill2dMeshFlat(p.mesh, palette[p.colorIdx mod palette.len], textTransform)
-      of MergedLines:
-        for glyphPieces in mergedPieces:
           for p in glyphPieces:
             ctx.fill2dMeshFlat(p.mesh, palette[p.colorIdx mod palette.len], textTransform)
       of RawLines:

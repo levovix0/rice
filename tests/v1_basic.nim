@@ -47,7 +47,7 @@ test "basic":
 
     of 1:
       ctx.viewport = combine(
-        translate(pos),
+        translate(-pos),
         rot,
         scale(vec3(zoom)),
         scale(vec3(vh / vw, 1, 1/1000))
@@ -82,7 +82,7 @@ test "basic":
       
     of 2:
       ctx.viewport = combine(
-        translate(pos),
+        translate(-pos),
         rot,
         scale(vec3(zoom)),
         scale(vec3(vh / vw, 1, 1/1000))

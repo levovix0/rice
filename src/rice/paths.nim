@@ -1,257 +1,186 @@
-import std/algorithm
+import std/[algorithm, tables]
 import pkg/[bumpy, chroma, vmath]
 import pkg/pixie/paths {.all.} as pixiePaths
 import ./[gl, contexts]
 
-
-proc area(a, b, c: Vec2): float =
-  (b.x - a.x)*(c.y - a.y) - (b.y - a.y)*(c.x - a.x)
-
-proc leftOn(a, b, c: Vec2): bool = area(a, b, c) >= 0
-proc right(a, b, c: Vec2): bool = area(a, b, c) < 0
-proc rightOn(a, b, c: Vec2): bool = area(a, b, c) <= 0
-
-proc sqdist(a, b: Vec2): float =
-  (a.x - b.x)^2 + (a.y - b.y)^2
-
-proc isReflex(poly: Polygon, i: int): bool =
-  let
-    prev = poly[(i - 1 + poly.len) mod poly.len]
-    curr = poly[i]
-    next = poly[(i + 1) mod poly.len]
-  right(prev, curr, next)
-
-proc segmentsIntersect(a, b, c, d: Vec2): bool =
-  if max(a.x,b.x) < min(c.x,d.x): return false
-  if max(c.x,d.x) < min(a.x,b.x): return false
-  if max(a.y,b.y) < min(c.y,d.y): return false
-  if max(c.y,d.y) < min(a.y,b.y): return false
-
-  area(a,b,c) * area(a,b,d) <= 0 and
-  area(c,d,a) * area(c,d,b) <= 0
-
-proc canSee(poly: Polygon, i, j: int): bool =
-  let
-    a = poly[i]
-    b = poly[j]
-
-  if isReflex(poly, i):
-    if (
-      leftOn(poly[i], poly[(i-1+poly.len) mod poly.len], poly[j]) and
-      rightOn(poly[i], poly[(i+1) mod poly.len], poly[j])
-    ):
-      return false
-  else:
-    if (
-      rightOn(poly[i], poly[(i+1) mod poly.len], poly[j]) or
-      leftOn(poly[i], poly[(i-1+poly.len) mod poly.len], poly[j])
-    ):
-      return false
-
-  if isReflex(poly, j):
-    if (
-      leftOn(poly[j], poly[(j-1+poly.len) mod poly.len], poly[i]) and
-      rightOn(poly[j], poly[(j+1) mod poly.len], poly[i])
-    ):
-      return false
-  else:
-    if (
-      rightOn(poly[j], poly[(j+1) mod poly.len], poly[i]) or
-      leftOn(poly[j], poly[(j-1+poly.len) mod poly.len], poly[i])
-    ):
-      return false
-
-  for k in 0..<poly.len:
-    let k1 = (k + 1) mod poly.len
-    if k == i or k1 == i or k == j or k1 == j:
-      continue
-    if segmentsIntersect(a, b, poly[k], poly[k1]):
-      return false
-
-  return true
-
-proc slice(poly: Polygon, i, j: int): (Polygon, Polygon) =
-  var p1, p2: Polygon
-
-  var k = i
-  while true:
-    p1.add(poly[k])
-    if k == j: break
-    k = (k + 1) mod poly.len
-
-  k = j
-  while true:
-    p2.add(poly[k])
-    if k == i: break
-    k = (k + 1) mod poly.len
-
-  (p1, p2)
-
-proc signedArea(poly: Polygon): float32 =
-  ## Positive for counter-clockwise, negative for clockwise.
-  for i in 0..<poly.len:
-    let j = (i + 1) mod poly.len
-    result += poly[i].x * poly[j].y - poly[j].x * poly[i].y
-  result *= 0.5
+export pixiePaths.WindingRule
 
 
-proc fanTriangulate(poly: Polygon, result: var seq[Vec2]) =
-  ## Converts a (convex or semi-convex) polygon into GL_TRIANGLES points
-  let n = poly.len
-  # After bridging holes, the polygon may have a "dent" at the bridge seam, so
-  # fanning from vertex 0 can produce wrongly-wound triangles. Find the first
-  # vertex from which every fan triangle has the same sign as the polygon area.
-  let wantPos = signedArea(poly) >= 0
-  var start = 0
-  block findStart:
-    for i in 0..<n:
-      var ok = true
-      for k in 1..<n - 1:
-        let a = area(poly[i], poly[(i + k) mod n], poly[(i + k + 1) mod n])
-        if wantPos and a < 0: ok = false; break
-        if not wantPos and a > 0: ok = false; break
-      if ok: start = i; break findStart
-  for i in 1..<n - 1:
-    result.add poly[start]
-    result.add poly[(start + i) mod n]
-    result.add poly[(start + i + 1) mod n]
-
-proc decompose(poly: Polygon, result: var seq[Vec2]) =
-  ## Bayazit decomposition emitting GL_TRIANGLES vertices directly
-  ## https://github.com/Crackshell/bayazit.h
-  for i in 0..<poly.len:
-    if isReflex(poly, i):
-      var bestJ = -1
-      var bestDist = float.high
-
-      for j in 0..<poly.len:
-        if canSee(poly, i, j):
-          let d = sqdist(poly[i], poly[j])
-          if d < bestDist:
-            bestDist = d
-            bestJ = j
-
-      if bestJ != -1:
-        let (p1, p2) = slice(poly, i, bestJ)
-        decompose(p1, result)
-        decompose(p2, result)
-        return
-
-  fanTriangulate(poly, result)
-
-proc toTriangles*(poly: Polygon): seq[Vec2] =
-  ## Triangulates an arbitrary polygon, returns GL_TRIANGLE vertex list (3 vertices per triangle)
-  if poly.len < 3: return
-  decompose(poly, result)
+type
+  ScanEdge = object
+    a, b: Vec2      # a.y < b.y always
+    winding: int32  # +1 if the contour ran downward (a -> b), -1 if upward
 
 
-proc bridgeHole*(outer: Polygon, hole: Polygon): Polygon =
-  ## Merges hole into outer creating a single simple polygon via a horizontal bridge.
-  ## Expects outer to be CCW (positive area) and hole to be CW (negative area).
+proc cross2(a, b: Vec2): float32 =
+  a.x * b.y - a.y * b.x
 
-  # Find the rightmost vertex of the hole
-  var mIdx = 0
-  for i in 1..<hole.len:
-    if hole[i].x > hole[mIdx].x:
-      mIdx = i
-  let m = hole[mIdx]
-
-  # Find the nearest outer edge hit by a rightward ray from m
-  var bestIx = float32.high
-  var bestI = -1
-
-  for i in 0..<outer.len:
-    let j = (i + 1) mod outer.len
-    let a = outer[i]
-    let b = outer[j]
-    if (a.y <= m.y) != (b.y <= m.y):
-      let ix = a.x + (m.y - a.y) / (b.y - a.y) * (b.x - a.x)
-      if ix >= m.x and ix < bestIx:
-        bestIx = ix
-        bestI = i
-
-  if bestI == -1:
-    return outer
-
-  let j = (bestI + 1) mod outer.len
-  let bridgeIdx = if outer[bestI].x >= outer[j].x: bestI else: j
-
-  result = newSeqOfCap[Vec2](outer.len + hole.len + 2)
-  for i in 0..bridgeIdx:
-    result.add outer[i]
-  for i in 0..<hole.len:
-    result.add hole[(mIdx + i) mod hole.len]
-  result.add hole[mIdx]
-  for i in bridgeIdx..<outer.len:
-    result.add outer[i]
+proc xAt(e: ScanEdge, y: float32): float32 =
+  let t = clamp((y - e.a.y) / (e.b.y - e.a.y), 0, 1)
+  e.a.x + (e.b.x - e.a.x) * t
 
 
-proc removeHoles*(contours: seq[Polygon]): seq[Polygon] =
-  ## Merges hole contours into their outer polygons via a bridge.
-  ## A hole is an inner contour with opposite winding to its enclosing outer (non-zero fill rule).
-  ## Inner contours with the same winding as their outer are additive — returned as separate polygons.
-  if contours.len <= 1:
-    return contours
+proc triangulate*(polygons: openarray[Polygon], windingRule = NonZero): seq[Vec2] =
+  ## Triangulates a set of closed contours into a single list of non-overlapping
+  ## GL_TRIANGLES vertices (3 per triangle) using a scanline (trapezoidal) decomposition.
+  ##
+  ## Contours are arbitrary: they may self-intersect, intersect each other, share no
+  ## vertices, fully or partially overlap. The filled region is defined by the winding
+  ## rule, so with NonZero overlapping same-winding contours are united and an
+  ## opposite-winding contour is subtracted (cuts a hole), even when its edges cross
+  ## edges of other contours.
 
-  var centroids = newSeq[Vec2](contours.len)
-  for i, poly in contours:
-    var c = vec2(0, 0)
-    for v in poly: c += v
-    centroids[i] = c / float32(poly.len)
+  # 1. Collect non-horizontal edges (horizontal edges never change scanline winding).
+  var edges: seq[ScanEdge]
+  var pmin = vec2(float32.high, float32.high)
+  var pmax = vec2(-float32.high, -float32.high)
+  for poly in polygons:
+    for i in 0 ..< poly.len:
+      let p = poly[i]
+      let q = poly[(i + 1) mod poly.len]
+      pmin = min(pmin, p)
+      pmax = max(pmax, p)
+      if p.y < q.y:
+        edges.add ScanEdge(a: p, b: q, winding: 1)
+      elif p.y > q.y:
+        edges.add ScanEdge(a: q, b: p, winding: -1)
+  if edges.len == 0: return
 
-  var areas = newSeq[float32](contours.len)
-  for i, poly in contours: areas[i] = abs(signedArea(poly))
+  let eps = max(max(pmax.x - pmin.x, pmax.y - pmin.y) * 1e-6, 1e-12)
 
-  # Find the smallest enclosing polygon for each contour.
-  var outerOf = newSeq[int](contours.len)
-  for i in 0..<contours.len: outerOf[i] = -1
+  # 2. Split edges at every pairwise crossing, so that inside any horizontal slab
+  #    the left-to-right order of edges is the same along the slab's whole height.
+  #    Both sub-edges of a pair share the exact same split point.
+  var cuts = newSeq[seq[(float64, Vec2)]](edges.len)
+  for i in 0 ..< edges.len:
+    let (ia, ib) = (edges[i].a, edges[i].b)
+    for j in i + 1 ..< edges.len:
+      let (ja, jb) = (edges[j].a, edges[j].b)
+      if ia.y > jb.y or ja.y > ib.y: continue
+      if max(ia.x, ib.x) < min(ja.x, jb.x) or max(ja.x, jb.x) < min(ia.x, ib.x): continue
 
-  for i in 0..<contours.len:
-    var bestArea = float32.high
-    for j in 0..<contours.len:
-      if i == j: continue
-      if areas[j] > areas[i] and contours[j].overlaps(centroids[i]):
-        if areas[j] < bestArea:
-          bestArea = areas[j]
-          outerOf[i] = j
+      let d1x = (ib.x - ia.x).float64
+      let d1y = (ib.y - ia.y).float64
+      let d2x = (jb.x - ja.x).float64
+      let d2y = (jb.y - ja.y).float64
+      let denom = d1x * d2y - d1y * d2x
+      # parallel and collinear-overlapping edges need no split: within a slab they
+      # stay at the same x, the span between them is degenerate and gets dropped
+      if abs(denom) < 1e-12: continue
 
-  var polys = newSeq[Polygon](contours.len)
-  for i in 0..<contours.len: polys[i] = contours[i]
+      let wx = (ja.x - ia.x).float64
+      let wy = (ja.y - ia.y).float64
+      let t = (wx * d2y - wy * d2x) / denom
+      let u = (wx * d1y - wy * d1x) / denom
 
-  # True hole = opposite winding to its enclosing outer (non-zero rule: winding cancels to 0).
-  # Same winding = additive sub-shape (winding accumulates, area stays filled).
-  var isHole = newSeq[bool](contours.len)
-  for i in 0..<contours.len:
-    if outerOf[i] != -1:
-      isHole[i] = signedArea(contours[i]) * signedArea(contours[outerOf[i]]) < 0
+      const pe = 1e-6
+      if t < -pe or t > 1 + pe or u < -pe or u > 1 + pe: continue
+      let p = vec2((ia.x.float64 + d1x * t).float32, (ia.y.float64 + d1y * t).float32)
+      if t > pe and t < 1 - pe: cuts[i].add (t, p)
+      if u > pe and u < 1 - pe: cuts[j].add (u, p)
 
-  # Ensure outer contours and additive inner contours are CCW for Bayazit
-  for i in 0..<contours.len:
-    if outerOf[i] == -1 or not isHole[i]:
-      if signedArea(polys[i]) < 0:
-        polys[i].reverse()
+  var splitEdges: seq[ScanEdge]
+  for i in 0 ..< edges.len:
+    if cuts[i].len == 0:
+      splitEdges.add edges[i]
+    else:
+      cuts[i].sort proc(x, y: (float64, Vec2)): int = cmp(x[0], y[0])
+      var prev = edges[i].a
+      for (_, p) in cuts[i]:
+        if p.y > prev.y:
+          splitEdges.add ScanEdge(a: prev, b: p, winding: edges[i].winding)
+          prev = p
+      if edges[i].b.y > prev.y:
+        splitEdges.add ScanEdge(a: prev, b: edges[i].b, winding: edges[i].winding)
 
-  # Merge each true hole into its outer polygon
-  for i in 0..<contours.len:
-    if isHole[i]:
-      var hole = polys[i]
-      if signedArea(hole) > 0:
-        hole.reverse()
-      polys[outerOf[i]] = bridgeHole(polys[outerOf[i]], hole)
+  # 3. Horizontal slabs between consecutive distinct y's of all edge endpoints.
+  #    Every edge either fully spans a slab or doesn't reach its midline at all.
+  var ys = newSeqOfCap[float32](splitEdges.len * 2)
+  for e in splitEdges:
+    ys.add e.a.y
+    ys.add e.b.y
+  ys.sort()
+  var slabs = @[ys[0]]
+  for y in ys:
+    if y - slabs[^1] > eps: slabs.add y
+  if slabs.len < 2: return
 
-  for i in 0..<contours.len:
-    if outerOf[i] == -1 or not isHole[i]:
-      result.add polys[i]
+  let epsArea2 = eps * eps * 2  # cross2 is twice the triangle area
+
+  template emitTrapezoid(li, ri: int, ty, by: float32) =
+    let le = splitEdges[li]
+    let re = splitEdges[ri]
+    let lt = vec2(le.xAt(ty), ty)
+    let rt = vec2(re.xAt(ty), ty)
+    let lb = vec2(le.xAt(by), by)
+    let rb = vec2(re.xAt(by), by)
+    # a side narrower than float32 rounding noise is a single point
+    # (e.g. a wedge between two edges meeting at their crossing) -> one triangle
+    let topPoint = abs(rt.x - lt.x) < eps
+    let botPoint = abs(rb.x - lb.x) < eps
+    if not topPoint and abs(cross2(rt - lt, rb - lt)) > epsArea2:
+      result.add lt
+      result.add rt
+      result.add rb
+    if not botPoint and abs(cross2(rb - lt, lb - lt)) > epsArea2:
+      result.add lt
+      result.add rb
+      result.add lb
+
+  # 4. Sweep the slabs top to bottom accumulating winding left to right.
+  #    A filled span bounded by the same edge pair across consecutive slabs is
+  #    merged into one trapezoid (spans: edge pair -> y where the region started).
+  var spans: Table[(int, int), float32]
+  var active: seq[(float32, float32, int)]  # (x at slab midline, x at slab bottom, edge index)
+
+  for si in 0 ..< slabs.len - 1:
+    let y0 = slabs[si]
+    let y1 = slabs[si + 1]
+    let midY = (y0 + y1) * 0.5
+
+    active.setLen 0
+    for idx, e in splitEdges:
+      if e.a.y < midY and e.b.y > midY:
+        active.add (e.xAt(midY), e.xAt(y1), idx)
+    active.sort proc(a, b: (float32, float32, int)): int =
+      result = cmp(a[0], b[0])
+      if result == 0: result = cmp(a[1], b[1])
+
+    var newSpans: Table[(int, int), float32]
+    var w = 0'i32
+    for k in 0 ..< max(active.len - 1, 0):
+      w += splitEdges[active[k][2]].winding
+      let inside =
+        case windingRule
+        of NonZero: w != 0
+        of EvenOdd: (w and 1) != 0
+      if inside:
+        let key = (active[k][2], active[k + 1][2])
+        newSpans[key] = spans.getOrDefault(key, y0)
+
+    for key, startY in spans:
+      if key notin newSpans:
+        emitTrapezoid(key[0], key[1], startY, y0)
+    spans = newSpans
+
+  for key, startY in spans:
+    emitTrapezoid(key[0], key[1], startY, slabs[^1])
+
+
+proc toTriangles*(poly: Polygon, windingRule = NonZero): seq[Vec2] =
+  ## Triangulates an arbitrary (possibly self-intersecting) polygon,
+  ## returns GL_TRIANGLES vertex list (3 vertices per triangle)
+  triangulate([poly], windingRule)
 
 
 proc toMesh*(
   path: Path,
   pixelScale: float = 1,
+  windingRule = NonZero,
 ): Mesh =
-  ## triangulates path into a single GL_TRIANGLES mesh; handles holes correctly
-  var verts: seq[Vec2]
-  for poly in pixiePaths.commandsToShapes(path, true, pixelScale).removeHoles():
-    verts.add poly.toTriangles()
+  ## triangulates path into a single GL_TRIANGLES mesh of non-overlapping triangles;
+  ## handles holes, unions and subtractions of arbitrarily intersecting contours
+  let verts = triangulate(pixiePaths.commandsToShapes(path, true, pixelScale), windingRule)
   if verts.len > 0:
     result = newMesh(verts, GL_TRIANGLES)
 
@@ -265,10 +194,13 @@ proc toStrokeMesh*(
   dashes: seq[float32] = @[],
   pixelScale: float = 1,
 ): Mesh =
-  ## triangulates stroke of the path into a single GL_TRIANGLES mesh
-  var verts: seq[Vec2]
-  for shape in pixiePaths.strokeShapes(path.commandsToShapes(true, pixelScale), strokeWidth, lineCap, lineJoin, miterLimit, dashes, pixelScale):
-    verts.add shape.toTriangles()
+  ## triangulates stroke of the path into a single GL_TRIANGLES mesh;
+  ## overlapping stroke pieces are united, so translucent strokes don't double-blend
+  let shapes = pixiePaths.strokeShapes(
+    path.commandsToShapes(true, pixelScale),
+    strokeWidth, lineCap, lineJoin, miterLimit, dashes, pixelScale
+  )
+  let verts = triangulate(shapes, NonZero)
   if verts.len > 0:
     result = newMesh(verts, GL_TRIANGLES)
 
@@ -302,8 +234,9 @@ proc fillPath*(
   color: Color,
   transform = mat4(),
   pixelScale: float = 1,
+  windingRule = NonZero,
 ) =
-  fill2dMeshFlat(ctx, path.toMesh(pixelScale), color, transform)
+  fill2dMeshFlat(ctx, path.toMesh(pixelScale, windingRule), color, transform)
 
 
 proc strokePath*(
@@ -367,7 +300,5 @@ when isMainModule:
 
     ctx.pop psh
     blit psh
-  
+
   run win
-
-
