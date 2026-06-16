@@ -167,7 +167,7 @@ proc triangulate*(polygons: openarray[Polygon], windingRule = NonZero): seq[Vec2
     emitTrapezoid(key[0], key[1], startY, slabs[^1])
 
 
-proc toTriangles*(poly: Polygon, windingRule = NonZero): seq[Vec2] =
+proc triangulate*(poly: Polygon, windingRule = NonZero): seq[Vec2] =
   ## Triangulates an arbitrary (possibly self-intersecting) polygon,
   ## returns GL_TRIANGLES vertex list (3 vertices per triangle)
   triangulate([poly], windingRule)
