@@ -167,6 +167,7 @@ proc tryMangle(n: NimNode): Option[string] =
 proc makeShaderViaShady(
   ctx: NimNode,
   version: NimNode,
+  extra: NimNode,
   uniforms: Table[string, NimNode],  # name -> type
   id: int,
   vert: NimNode,
@@ -200,12 +201,14 @@ proc makeShaderViaShady(
     ShaderKind.vert: nnkCall.newTree(
       bindSym("toGLSL"),
       vert[0],
-      version
+      version,
+      extra
     ),
     ShaderKind.frag: nnkCall.newTree(
       bindSym("toGLSL"),
       frag[0],
-      version
+      version,
+      extra
     )
   ]
 
@@ -329,6 +332,7 @@ macro makeShaderImpl(
     uniformsInitTable: Table[string, NimNode]  # name -> init value
   
   var version: NimNode = newLit "300 es"
+  var extensions: HashSet[string] = initHashSet[string]()
   var origBody = body
   var body = body
   if body.kind != nnkStmtList:
@@ -527,6 +531,10 @@ macro makeShaderImpl(
     # {.version: ver.}
     if x.kind == nnkPragma and x.len == 1 and x[0].kind == nnkExprColonExpr and x[0][0] == ident("version"):
       version = x[0][1]
+
+    # {.extension: "GL_EXT_texture_buffer".}
+    elif x.kind == nnkPragma and x.len == 1 and x[0].kind == nnkExprColonExpr and x[0][0] == ident("extension"):
+      extensions.incl x[0][1].strVal
     
     # proc vert = body
     elif x.kind == nnkProcDef and x[0] == ident("vert"):
@@ -558,8 +566,17 @@ macro makeShaderImpl(
     result.add nnkLetSection.newTree(runtimeInsertionsDecl)
     result.add nnkLetSection.newTree(runtimeInsertionStubs)
 
+  let glslExtra =
+    block:
+      var extra = ""
+      for i in extensions:
+        extra.add "#extension " & i & " : enable\n"
+      extra.add "precision highp float;\n"
+
+      newLit(extra)
+
   result.add makeShaderViaShady(
-    ctx, version, uniformsTable, id,
+    ctx, version, glslExtra, uniformsTable, id,
     nnkProcDef.newTree(
       vertProcname,
       newEmptyNode(),
