@@ -264,7 +264,63 @@ proc makeAttributes(t: type) =
     glEnableVertexAttribArray 0
 
 
-proc newMesh*[T](vert: openarray[T], idx: openarray[GlUint], kind = GlTriangles): Mesh =
+proc edgesTriangleFan(vert: openarray[Vec2]): seq[Vec4] =
+  result = @[]
+  if vert.len < 3: return
+  for i in 0 ..< vert.len:
+    let j = (i + 1) mod vert.len
+    result.add vec4(vert[i].x, vert[i].y, vert[j].x, vert[j].y)
+
+proc edgesTriangleStrip(vert: openarray[Vec2]): seq[Vec4] =
+  result = @[]
+  if vert.len < 3: return
+
+  result.add vec4(vert[0].x, vert[0].y, vert[1].x, vert[1].y) # left cap
+
+  for k in 0 ..< vert.len - 2:
+    result.add vec4(vert[k].x, vert[k].y, vert[k+2].x, vert[k+2].y) # rail
+
+  result.add vec4(
+    vert[vert.len-2].x, vert[vert.len-2].y,
+    vert[vert.len-1].x, vert[vert.len-1].y
+  ) # right cap
+
+iterator triangles(idx: openarray[GlUint], kind: GlEnum): (GlUint, GlUint, GlUint) =
+  case kind
+  of GlTriangles:
+    for k in countup(0, idx.len - 3, 3):
+      yield (idx[k], idx[k+1], idx[k+2])
+  of GlTriangleStrip:
+    for i in 0 ..< idx.len - 2:
+      yield (idx[i], idx[i+1], idx[i+2])
+  of GlTriangleFan:
+    for i in 1 ..< idx.len - 1:
+      yield (idx[0], idx[i], idx[i+1])
+  else: discard
+
+proc edgesIndexed(vert: openarray[Vec2], idx: openarray[GlUint], kind = GlTriangles): seq[Vec4] =
+  result = @[]
+  var seen = initHashSet[(GlUint, GlUint)]()
+  for (a, b, c) in triangles(idx, kind):
+    if a == b or b == c or a == c: continue # degenerate triangle
+    for (p, q) in [(a, b), (b, c), (c, a)]:
+      let key =
+        if p <= q: (p, q)
+        else: (q, p)
+
+      if key in seen:
+        seen.excl key
+      else:
+        seen.incl key
+
+  for (p, q) in seen:
+    result.add vec4(
+      vert[p.int].x, vert[p.int].y,
+      vert[q.int].x, vert[q.int].y
+    )
+
+
+proc newMesh*[T](vert: openarray[T], idx: openarray[GlUint], kind = GlTriangles, edgeTbo = false): Mesh =
   result.vao = newVertexArrays(1)
   result.bo = newBuffers(2)
   result.len = idx.len
@@ -277,6 +333,18 @@ proc newMesh*[T](vert: openarray[T], idx: openarray[GlUint], kind = GlTriangles)
     glBindBuffer GlElementArrayBuffer, result.bo[1]
     elementArrayBufferData idx
     makeAttributes T
+
+  when T is Vec2:
+    if edgeTbo:
+      if kind.uint8 notin {GlTriangles.uint8, GlTriangleStrip.uint8, GlTriangleFan.uint8}:
+        raise ValueError.newException "edgeTbo require GL_TRIANGLES, GL_TRIANGLE_FAN, GL_TRIANGLE_STRIP"
+      let edges = edgesIndexed(vert, idx, kind)
+      if edges.len > 0:
+        result.tbo = newTextureBuffer(edges, GlRgba32f)
+        result.flags.incl hasEdgeTbo
+  else:
+    if edgeTbo:
+      raise ValueError.newException "edgeTbo flag supported only for Vec2"
 
 proc newMesh*[T](vert: openarray[T], kind = GlTriangles, edgeTbo = false): Mesh =
   result.vao = newVertexArrays(1)
@@ -292,20 +360,19 @@ proc newMesh*[T](vert: openarray[T], kind = GlTriangles, edgeTbo = false): Mesh 
 
   when T is Vec2:
     if edgeTbo:
-      # you can get correct result in case of triangle fan
+      # you can get correct result in case of triangle fan or strip
       # otherwise, detecting edges realy hard, so:
-      assert:
-        vert.len >= 3 and
-        kind == GlTriangleFan
+      assert vert.len >= 3
 
-      var edges: seq[Vec4] = @[]
+      let edges =
+        case kind
+        of GlTriangleFan: edgesTriangleFan(vert)
+        of GlTriangleStrip: edgesTriangleStrip(vert)
+        else: raise ValueError.newException "edgeTbo require GL_TRIANGLE_FAN or GL_TRIANGLE_STRIP"
 
-      for i in 0 ..< vert.len:
-        let j = (i + 1) mod vert.len
-        edges.add vec4(vert[i].x, vert[i].y, vert[j].x, vert[j].y)
-
-      result.tbo = newTextureBuffer(edges, GlRgba32f)
-      result.flags.incl hasEdgeTbo
+      if edges.len > 0:
+        result.tbo = newTextureBuffer(edges, GlRgba32f)
+        result.flags.incl hasEdgeTbo
   else:
     if edgeTbo:
       raise ValueError.newException "edgeTbo flag supported only for Vec2"
