@@ -387,7 +387,7 @@ ctx.fill2dMeshFlat(fillMesh, color(1, 0.5, 0))
 ctx.fill2dMeshFlat(strokeMesh, color(1, 1, 1))
 ```
 
-`toMesh` uses the Bayazit triangulation algorithm and handles holes via `removeHoles` (bridges them into outer contours).
+A Path may contain holes.
 
 Draw multiple meshes with the same color:
 ```nim

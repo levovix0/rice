@@ -118,10 +118,10 @@ when defined(gcc):
 
 # -------- helpers --------
 proc arrayBufferData*[T](data: openarray[T], usage: GlEnum = GlStaticDraw) =
-  glBufferData(GlArrayBuffer, data.len * T.sizeof, data.unsafeaddr, usage)
+  glBufferData(GlArrayBuffer, data.len * T.sizeof, data.addr, usage)
 
 proc elementArrayBufferData*[T](data: openarray[T], usage: GlEnum = GlStaticDraw) =
-  glBufferData(GlElementArrayBuffer, data.len * T.sizeof, data.unsafeaddr, usage)
+  glBufferData(GlElementArrayBuffer, data.len * T.sizeof, data.addr, usage)
 
 template withVertexArray*(vao: GlUint, body) =
   glBindVertexArray(vao)
@@ -211,11 +211,11 @@ proc `uniform=`*(i: GlInt, value: Vec4) =
 
 proc `uniform=`*(i: GlInt, value: Mat3) =
   if i != -1:
-    glUniformMatrix3fv(i, 1, GlFalse, cast[ptr GlFloat](value.unsafeaddr))
+    glUniformMatrix3fv(i, 1, GlFalse, cast[ptr GlFloat](value.addr))
 
 proc `uniform=`*(i: GlInt, value: Mat4) =
   if i != -1:
-    glUniformMatrix4fv(i, 1, GlFalse, cast[ptr GlFloat](value.unsafeaddr))
+    glUniformMatrix4fv(i, 1, GlFalse, cast[ptr GlFloat](value.addr))
 
 proc `uniform=`*(i: GlInt, value: int) =
   if i != -1:
@@ -232,7 +232,6 @@ proc `uniform=`*[T](x: OpenglUniform[T], value: T) =
 
 # -------- Texture buffer --------
 proc newTextureBuffer*[T](data: openArray[T], format: GlEnum = GlRgba32f): TextureBuffer =
-  # btf why codebase uses unsafe addr if it deprecated in new versions
   if data.len == 0: return
   result = TextureBuffer(len: data.len)
 
