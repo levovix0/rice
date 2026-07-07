@@ -278,20 +278,6 @@ proc newMesh*[T](vert: openarray[T], idx: openarray[GlUint], kind = GlTriangles)
     elementArrayBufferData idx
     makeAttributes T
 
-  # this one not tested, TODO: test
-  when T is Vec2:
-    if edgeTbo:
-      assert vert.len >= 3
-      var edges: seq[Vec4] = @[]
-
-      for i in 0 ..< vert.len:
-        let j = (i + 1) mod vert.len
-        edges.add vec4(vert[i].x, vert[i].y, vert[j].x, vert[j].y)
-
-      result.tbo = newTextureBuffer(edges, GlRgba32f)
-      result.flags.incl hasEdgeTbo
-
-
 proc newMesh*[T](vert: openarray[T], kind = GlTriangles, edgeTbo = false): Mesh =
   result.vao = newVertexArrays(1)
   result.bo = newBuffers(1)
@@ -306,7 +292,12 @@ proc newMesh*[T](vert: openarray[T], kind = GlTriangles, edgeTbo = false): Mesh 
 
   when T is Vec2:
     if edgeTbo:
-      assert vert.len >= 3
+      # you can get correct result in case of triangle fan
+      # otherwise, detecting edges realy hard, so:
+      assert:
+        vert.len >= 3 and
+        kind == GlTriangleFan
+
       var edges: seq[Vec4] = @[]
 
       for i in 0 ..< vert.len:
@@ -315,6 +306,9 @@ proc newMesh*[T](vert: openarray[T], kind = GlTriangles, edgeTbo = false): Mesh 
 
       result.tbo = newTextureBuffer(edges, GlRgba32f)
       result.flags.incl hasEdgeTbo
+  else:
+    if edgeTbo:
+      raise ValueError.newException "edgeTbo flag supported only for Vec2"
 
 
 proc draw*(x: Mesh, kind: GLenum = x.kind) =
