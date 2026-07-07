@@ -177,12 +177,25 @@ proc toMesh*(
   path: Path,
   pixelScale: float = 1,
   windingRule = NonZero,
+  edgeTbo = false,
 ): Mesh =
   ## triangulates path into a single GL_TRIANGLES mesh of non-overlapping triangles;
   ## handles holes, unions and subtractions of arbitrarily intersecting contours
-  let verts = triangulate(pixiePaths.commandsToShapes(path, true, pixelScale), windingRule)
+  let shapes = pixiePaths.commandsToShapes(path, true, pixelScale)
+  let verts = triangulate(shapes, windingRule)
   if verts.len > 0:
     result = newMesh(verts, GL_TRIANGLES)
+    if edgeTbo:
+      var edges: seq[Vec4] = @[]
+
+      for poly in shapes:
+        for i in 0 ..< poly.len:
+          let j = (i + 1) mod poly.len
+          edges.add vec4(poly[i].x, poly[i].y, poly[j].x, poly[j].y)
+
+      if edges.len > 0:
+        result.tbo = newTextureBuffer(edges, GlRgba32f)
+        result.flags.incl hasEdgeTbo
 
 
 proc toStrokeMesh*(

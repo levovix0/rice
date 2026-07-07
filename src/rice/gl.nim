@@ -37,16 +37,17 @@ type
   ShaderCompileDefect* = object of Defect
 
 
-  MeshFlag = enum
+  MeshFlag* = enum
     hasIndices
-  
+    hasEdgeTbo
+
   Mesh* = object
     kind*: GlEnum
     len*: int
     vao*: VertexArrays
     bo*: Buffers
     flags*: set[MeshFlag]
-
+    tbo*: TextureBuffer # currently used only for edges
 
   OpenglUniform*[T] = distinct GlInt
 
@@ -58,6 +59,21 @@ type
   TextureObj = object
     raw*: GlUint
     kind*: TextureKind
+
+  TextureBuffer* = ref TextureBufferObj
+  TextureBufferObj = object
+    tex*: GlUint
+    buf*: GlUint
+    len*: int
+
+{.push, warning[Effect]: off.}
+proc `=destroy`(x: TextureBufferObj) =
+  if x.tex != 0:
+    glDeleteTextures(1, x.tex.unsafeAddr)
+  if x.buf != 0:
+    glDeleteBuffers(1, x.buf.unsafeAddr)
+{.pop.}
+
 
 const rice_max_opengl_error_len {.intdefine.} = 512
 
@@ -201,9 +217,34 @@ proc `uniform=`*(i: GlInt, value: Mat4) =
   if i != -1:
     glUniformMatrix4fv(i, 1, GlFalse, cast[ptr GlFloat](value.unsafeaddr))
 
+proc `uniform=`*(i: GlInt, value: int) =
+  if i != -1:
+    glUniform1i(i, value.GlInt)
+
+proc `uniform=`*(i: GlInt, value: openArray[Vec2]) =
+  if i != -1 and value.len > 0:
+    glUniform2fv(i, value.len.GlSizei, cast[ptr GlFloat](value[0].addr))
 
 proc `uniform=`*[T](x: OpenglUniform[T], value: T) =
   `uniform=`(x.GlInt, value)
+
+
+
+# -------- Texture buffer --------
+proc newTextureBuffer*[T](data: openArray[T], format: GlEnum = GlRgba32f): TextureBuffer =
+  # btf why codebase uses unsafe addr if it deprecated in new versions
+  if data.len == 0: return
+  result = TextureBuffer(len: data.len)
+
+  glGenTextures(1, result.tex.addr)
+  glGenBuffers(1, result.buf.addr)
+  glBindBuffer(GlTextureBuffer, result.buf)
+  glBufferData(GlTextureBuffer, data.len * T.sizeof, data[0].addr, GlStaticDraw)
+  glBindTexture(GlTextureBuffer, result.tex)
+  glTexBuffer(GlTextureBuffer, format, result.buf)
+  glBindTexture(GlTextureBuffer, 0)
+  glBindBuffer(GlTextureBuffer, 0)
+
 
 
 # -------- Mesh --------
@@ -223,7 +264,63 @@ proc makeAttributes(t: type) =
     glEnableVertexAttribArray 0
 
 
-proc newMesh*[T](vert: openarray[T], idx: openarray[GlUint], kind = GlTriangles): Mesh =
+proc edgesTriangleFan(vert: openarray[Vec2]): seq[Vec4] =
+  result = @[]
+  if vert.len < 3: return
+  for i in 0 ..< vert.len:
+    let j = (i + 1) mod vert.len
+    result.add vec4(vert[i].x, vert[i].y, vert[j].x, vert[j].y)
+
+proc edgesTriangleStrip(vert: openarray[Vec2]): seq[Vec4] =
+  result = @[]
+  if vert.len < 3: return
+
+  result.add vec4(vert[0].x, vert[0].y, vert[1].x, vert[1].y) # left cap
+
+  for k in 0 ..< vert.len - 2:
+    result.add vec4(vert[k].x, vert[k].y, vert[k+2].x, vert[k+2].y) # rail
+
+  result.add vec4(
+    vert[vert.len-2].x, vert[vert.len-2].y,
+    vert[vert.len-1].x, vert[vert.len-1].y
+  ) # right cap
+
+iterator triangles(idx: openarray[GlUint], kind: GlEnum): (GlUint, GlUint, GlUint) =
+  case kind
+  of GlTriangles:
+    for k in countup(0, idx.len - 3, 3):
+      yield (idx[k], idx[k+1], idx[k+2])
+  of GlTriangleStrip:
+    for i in 0 ..< idx.len - 2:
+      yield (idx[i], idx[i+1], idx[i+2])
+  of GlTriangleFan:
+    for i in 1 ..< idx.len - 1:
+      yield (idx[0], idx[i], idx[i+1])
+  else: discard
+
+proc edgesIndexed(vert: openarray[Vec2], idx: openarray[GlUint], kind = GlTriangles): seq[Vec4] =
+  result = @[]
+  var seen = initHashSet[(GlUint, GlUint)]()
+  for (a, b, c) in triangles(idx, kind):
+    if a == b or b == c or a == c: continue # degenerate triangle
+    for (p, q) in [(a, b), (b, c), (c, a)]:
+      let key =
+        if p <= q: (p, q)
+        else: (q, p)
+
+      if key in seen:
+        seen.excl key
+      else:
+        seen.incl key
+
+  for (p, q) in seen:
+    result.add vec4(
+      vert[p.int].x, vert[p.int].y,
+      vert[q.int].x, vert[q.int].y
+    )
+
+
+proc newMesh*[T](vert: openarray[T], idx: openarray[GlUint], kind = GlTriangles, edgeTbo = false): Mesh =
   result.vao = newVertexArrays(1)
   result.bo = newBuffers(2)
   result.len = idx.len
@@ -237,8 +334,19 @@ proc newMesh*[T](vert: openarray[T], idx: openarray[GlUint], kind = GlTriangles)
     elementArrayBufferData idx
     makeAttributes T
 
+  when T is Vec2:
+    if edgeTbo:
+      if kind.uint8 notin {GlTriangles.uint8, GlTriangleStrip.uint8, GlTriangleFan.uint8}:
+        raise ValueError.newException "edgeTbo require GL_TRIANGLES, GL_TRIANGLE_FAN, GL_TRIANGLE_STRIP"
+      let edges = edgesIndexed(vert, idx, kind)
+      if edges.len > 0:
+        result.tbo = newTextureBuffer(edges, GlRgba32f)
+        result.flags.incl hasEdgeTbo
+  else:
+    if edgeTbo:
+      raise ValueError.newException "edgeTbo flag supported only for Vec2"
 
-proc newMesh*[T](vert: openarray[T], kind = GlTriangles): Mesh =
+proc newMesh*[T](vert: openarray[T], kind = GlTriangles, edgeTbo = false): Mesh =
   result.vao = newVertexArrays(1)
   result.bo = newBuffers(1)
   result.len = vert.len
@@ -250,14 +358,43 @@ proc newMesh*[T](vert: openarray[T], kind = GlTriangles): Mesh =
     arrayBufferData vert
     makeAttributes T
 
+  when T is Vec2:
+    if edgeTbo:
+      # you can get correct result in case of triangle fan or strip
+      # otherwise, detecting edges realy hard, so:
+      assert vert.len >= 3
+
+      let edges =
+        case kind
+        of GlTriangleFan: edgesTriangleFan(vert)
+        of GlTriangleStrip: edgesTriangleStrip(vert)
+        else: raise ValueError.newException "edgeTbo require GL_TRIANGLE_FAN or GL_TRIANGLE_STRIP"
+
+      if edges.len > 0:
+        result.tbo = newTextureBuffer(edges, GlRgba32f)
+        result.flags.incl hasEdgeTbo
+  else:
+    if edgeTbo:
+      raise ValueError.newException "edgeTbo flag supported only for Vec2"
+
 
 proc draw*(x: Mesh, kind: GLenum = x.kind) =
   if x.len == 0: return
+  let bindTbo =
+    hasEdgeTbo in x.flags and
+    x.tbo != nil
+
+  if bindTbo:
+    glBindTexture(GlTextureBuffer, x.tbo.tex)
+
   withVertexArray x.vao[0]:
     if hasIndices in x.flags:
       glDrawElements(kind, x.len.GlSizei, GlUnsignedInt, nil)
     else:
       glDrawArrays(kind, 0, x.len.GlSizei)
+
+  if bindTbo:
+    glBindTexture(GlTextureBuffer, 0)
 
 
 
