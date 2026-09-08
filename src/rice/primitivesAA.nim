@@ -1,4 +1,4 @@
-import pkg/[vmath, shady]
+import pkg/[vmath, shady, chroma]
 import ./[gl, contexts]
 
 ## drawing primitives with fragment shader antialiasing
@@ -28,7 +28,15 @@ proc roundRect(pos, size: Vec2, radius: float32): float32 =
   return 1
 
 
-proc drawRect*(ctx: DrawContext, pos: Vec2, size: Vec2, col: Vec4, radius: float32, blend: bool, angle: float32) =
+proc fillRect*(
+  ctx: DrawContext,
+  pos: Vec2,
+  size: Vec2,
+  color: Color,
+  radius: float32 = 0,
+  blend: bool = true,
+  angle: float32 = 0,
+) =
   let shader = ctx.makeShader:
     proc vert(
       gl_Position: var Vec4,
@@ -56,12 +64,28 @@ proc drawRect*(ctx: DrawContext, pos: Vec2, size: Vec2, col: Vec4, radius: float
   use shader.shader
   ctx.passTransform(shader, pos=pos, size=size, angle=angle)
   shader.radius.uniform = radius
-  shader.color.uniform = col
+  shader.color.uniform = color.vec4
   draw ctx.rect
   if blend: glDisable(GlBlend)
 
+proc drawRect*(ctx: DrawContext, pos: Vec2, size: Vec2, col: Vec4, radius: float32, blend: bool, angle: float32) {.deprecated: "use fillRect instead".} =
+  fillRect(ctx, pos, size, col.color, radius, blend, angle)
 
-proc drawRectStroke*(ctx: DrawContext, pos: Vec2, size: Vec2, col: Vec4, radius: float32, blend: bool, angle: float32, borderWidth: float32, tiled: bool, tileSize: Vec2, tileSecondSize: Vec2, secondColor: Vec4) =
+
+proc drawRect*(
+  ctx: DrawContext,
+  pos: Vec2,
+  size: Vec2,
+  color: Color,
+  thickness: float32 = 0,
+  radius: float32 = 0,
+  blend: bool = true,
+  angle: float32 = 0,
+  tiled: bool = false,
+  tileSize: Vec2 = vec2(),
+  tileSecondSize: Vec2 = vec2(),
+  secondColor: Color = color(0, 0, 0, 0),
+) =
   proc roundRectStroke(pos, size: Vec2, radius: float32, borderWidth: float32): float32 =
     if pos.x < radius + borderWidth and pos.y < radius + borderWidth:
       let d = length(pos - vec2(radius, radius) - vec2(borderWidth, borderWidth))
@@ -151,17 +175,21 @@ proc drawRectStroke*(ctx: DrawContext, pos: Vec2, size: Vec2, col: Vec4, radius:
   use shader.shader
   ctx.passTransform(shader, pos=pos, size=size, angle=angle)
   shader.radius.uniform = radius
-  shader.color.uniform = col
-  shader.borderWidth.uniform = borderWidth
+  shader.color.uniform = color.vec4
+  shader.borderWidth.uniform = thickness
   if tiled:
     shader.tileSize.uniform = tileSize
     shader.tileSecondSize.uniform = tileSecondSize
   else:
     shader.tileSize.uniform = size
     shader.tileSecondSize.uniform = vec2(0, 0)
-  shader.secondColor.uniform = secondColor
+  shader.secondColor.uniform = secondColor.vec4
   draw ctx.rect
   if blend: glDisable(GlBlend)
+
+
+proc drawRectStroke*(ctx: DrawContext, pos: Vec2, size: Vec2, col: Vec4, radius: float32, blend: bool, angle: float32, borderWidth: float32, tiled: bool, tileSize: Vec2, tileSecondSize: Vec2, secondColor: Vec4) {.deprecated: "use drawRect instead".} =
+  drawRect(ctx, pos, size, col.color, borderWidth, radius, blend, angle, tiled, tileSize, tileSecondSize, secondColor.color)
 
 
 proc drawImage*(
@@ -170,9 +198,9 @@ proc drawImage*(
   size: Vec2,
   tex: GlUint,
   color: Vec4,
-  radius: float32,
-  blend: bool,
-  angle: float32,
+  radius: float32 = 0,
+  blend: bool = true,
+  angle: float32 = 0,
   flipY = false,
   imagePos = vec2(),
   imageSize = vec2(),
