@@ -197,7 +197,7 @@ proc drawImage*(
   pos: Vec2,
   size: Vec2,
   tex: GlUint,
-  color: Vec4,
+  color: Color,
   radius: float32 = 0,
   blend: bool = true,
   angle: float32 = 0,
@@ -242,7 +242,7 @@ proc drawImage*(
   use shader.shader
   ctx.passTransform(shader, pos=pos, size=size, angle=angle, flipY=flipY)
   shader.radius.uniform = radius
-  shader.color.uniform = color
+  shader.color.uniform = color.vec4
   shader.imPos.uniform = imPos
   shader.imSizeK.uniform = size / imageSize
   glBindTexture(GlTexture2d, tex)
@@ -251,7 +251,16 @@ proc drawImage*(
   if blend: glDisable(GlBlend)
 
 
-proc drawIcon*(ctx: DrawContext, pos: Vec2, size: Vec2, tex: GlUint, col: Vec4, radius: float32, blend: bool, angle: float32) =
+proc drawIcon*(
+  ctx: DrawContext,
+  pos: Vec2,
+  size: Vec2,
+  tex: GlUint,
+  color: Color,
+  radius: float32,
+  blend: bool,
+  angle: float32,
+) =
   # draw image (with solid color)
   let shader = ctx.makeShader:
     proc vert(
@@ -284,14 +293,22 @@ proc drawIcon*(ctx: DrawContext, pos: Vec2, size: Vec2, tex: GlUint, col: Vec4, 
   use shader.shader
   ctx.passTransform(shader, pos=pos, size=size, angle=angle)
   shader.radius.uniform = radius
-  shader.color.uniform = col
+  shader.color.uniform = color.vec4
   glBindTexture(GlTexture2d, tex)
   draw ctx.rect
   glBindTexture(GlTexture2d, 0)
   if blend: glDisable(GlBlend)
 
 
-proc drawShadowRect*(ctx: DrawContext, pos: Vec2, size: Vec2, col: Vec4, radius: float32, blend: bool, blurRadius: float32, angle: float32) =
+proc drawShadowRect*(
+  ctx: DrawContext,
+  pos: Vec2,
+  size: Vec2,
+  color: Color,
+  blurRadius: float32,
+  radius: float32 = 0,
+  angle: float32 = 0,
+) =
   proc distanceRoundRect(pos, size: Vec2, radius: float32, blurRadius: float32): float32 =
     if pos.x < radius + blurRadius and pos.y < radius + blurRadius:
       let d = length(pos - vec2(radius + blurRadius, radius + blurRadius))
@@ -347,16 +364,16 @@ proc drawShadowRect*(ctx: DrawContext, pos: Vec2, size: Vec2, col: Vec4, radius:
     ) =
       glCol = vec4(color.Vec4.rgb * color.Vec4.a, color.Vec4.a) * distanceRoundRect(pos, size.Vec2, radius.float, blurRadius.float)
 
-  if blend:
-    glEnable(GlBlend)
-    glBlendFuncSeparate(GlOne, GlOneMinusSrcAlpha, GlOne, GlOne)
+  glEnable(GlBlend)
+  glBlendFuncSeparate(GlOne, GlOneMinusSrcAlpha, GlOne, GlOne)
   
   use shader.shader
   ctx.passTransform(shader, pos=pos, size=size, angle=angle)
   shader.radius.uniform = radius
-  shader.color.uniform = col
+  shader.color.uniform = color.vec4
   shader.blurRadius.uniform = blurRadius
   draw ctx.rect
-  if blend: glDisable(GlBlend)
+  
+  glDisable(GlBlend)
 
 

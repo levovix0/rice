@@ -639,7 +639,8 @@ macro makeShaderImpl(
       )
     ),
     nnkPragma.newTree(
-      ident("dirty")
+      ident("dirty"),
+      ident("used"),
     ),
     newEmptyNode(),
     useAndPassUniformsBody,
