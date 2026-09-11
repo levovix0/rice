@@ -1,6 +1,7 @@
 import std/[unicode, tables, math]
 import pkg/[shady, bumpy]
-import pkg/pixie/fonts
+import pkg/pixie/[fonts]
+import pkg/pixie/rendering/[fontpoly]
 import ./[gl, contexts, paths]
 
 type

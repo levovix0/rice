@@ -1,9 +1,10 @@
 import std/[algorithm, tables]
 import pkg/[bumpy, chroma, vmath]
-import pkg/pixie/paths {.all.} as pixiePaths
+import pkg/pixie/[paths]
+import pkg/pixie/rendering/[pathpoly]
 import ./[gl, contexts]
 
-export pixiePaths.WindingRule
+export WindingRule
 
 
 type
@@ -181,7 +182,7 @@ proc toMesh*(
 ): Mesh =
   ## triangulates path into a single GL_TRIANGLES mesh of non-overlapping triangles;
   ## handles holes, unions and subtractions of arbitrarily intersecting contours
-  let shapes = pixiePaths.commandsToShapes(path, true, pixelScale)
+  let shapes = commandsToShapes(path, true, pixelScale)
   let verts = triangulate(shapes, windingRule)
   if verts.len > 0:
     result = newMesh(verts, GL_TRIANGLES)
@@ -209,7 +210,7 @@ proc toStrokeMesh*(
 ): Mesh =
   ## triangulates stroke of the path into a single GL_TRIANGLES mesh;
   ## overlapping stroke pieces are united, so translucent strokes don't double-blend
-  let shapes = pixiePaths.strokeShapes(
+  let shapes = strokeShapes(
     path.commandsToShapes(true, pixelScale),
     strokeWidth, lineCap, lineJoin, miterLimit, dashes, pixelScale
   )
