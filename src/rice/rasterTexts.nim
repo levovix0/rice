@@ -1,6 +1,7 @@
 import std/[unicode, tables, math]
 import pkg/[chroma, shady, bumpy]
 import pkg/pixie/[fonts, images, paints]
+import pkg/pixie/rendering/[fontpoly, fonts]
 import ./[gl, contexts]
 
 type
@@ -181,7 +182,7 @@ proc drawRasterText*(
   context.color.uniform = color
 
   let pos = ctx.viewportToGlMatrix * transform * pos
-  let box = arrangement.computeBounds()
+  let box = arrangement.computeBounds()  # todo: computeBounds is slow
 
   let offset =
     if exactBoundaries: vec2(box.x, -box.y) * ctx.px + vec2(box.w, -box.h) * origin * ctx.px

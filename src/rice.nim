@@ -4,11 +4,11 @@ export chroma, opengl
 import rice/[
   transform,
   gl, contexts, contextutils, antialiasing,
-  texts, primitives, polygonal3d, paths, hatching,
+  texts, rasterTexts, primitives, primitivesAA, polygonal3d, paths, hatching,
   fileformats
 ]
 export
   transform,
   gl, contexts, contextutils, antialiasing,
-  texts, primitives, polygonal3d, paths, hatching,
+  texts, rasterTexts, primitives, primitivesAA, polygonal3d, paths, hatching,
   fileformats
