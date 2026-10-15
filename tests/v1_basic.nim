@@ -12,7 +12,7 @@ test "basic":
   var aafb = ctx.newAntialiasedFramebuffer(win.size, depth = true)
 
   var time = 0'f32
-  var rot = toAngles(vec3(1, 1, 1)).fromAngles()
+  var rot = lookAt(vec3(0, 0, 0), vec3(-1, -1, -1), vec3(0, -1, 0))
   var pos = vec3()
   var zoom = 1'f32
   var to_display = 0
@@ -94,7 +94,7 @@ test "basic":
           color = color(0.3, 0.79, 1),
           transform = combine(
             rotateX(float32 Pi / 2),
-            translate(vec3(0, -0.5, 0)),
+            translate(vec3(0, 0.5, 0)),
             scale(vec3(1.02, 1.02, 1.02)),
           )
         )
@@ -109,7 +109,7 @@ test "basic":
         lightDir = vec3(-0.5, -0.5, 1),
         transform = combine(
           rotateX(float32 Pi / 2),
-          translate(vec3(0, -0.5, 0)),
+          translate(vec3(0, 0.5, 0)),
         )
       )
 

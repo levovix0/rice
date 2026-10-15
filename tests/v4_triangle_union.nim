@@ -102,21 +102,21 @@ test "triangle union":
 
       for p in c.a:
         if p.almostOverlapsTriangle(c.b[0], c.b[1], c.b[2]):
-          ctx.drawCircle(color(1, 1, 1), radius = 1/20, center = p.vec3(0) + c.offset)
+          ctx.drawCircle(center = p.vec3(0) + c.offset, radius = 1/20, color(1, 1, 1))
       for p in c.b:
         if p.almostOverlapsTriangle(c.a[0], c.a[1], c.a[2]):
-          ctx.drawCircle(color(1, 1, 1), radius = 1/20, center = p.vec3(0) + c.offset)
+          ctx.drawCircle(center = p.vec3(0) + c.offset, radius = 1/20, color(1, 1, 1))
 
       # row 1: union — one mesh of non-overlapping triangles,
       # translucent fill stays uniform, no double-blending in the overlap
       let unionOffset = c.offset + vec3(0, 3, 0)
-      ctx.fill2dMeshFlat(c.unionMesh, color(0.4, 1, 0.4, 0.5), translate(unionOffset))
+      ctx.fill2dMeshFlat(c.unionMesh, color(0, 0.8, 0.4, 0.5), translate(unionOffset))
       for wire in c.unionWire:
         ctx.fill2dMeshFlat(wire, color(1, 1, 1, 0.5), translate(unionOffset))
 
       # row 2: subtraction — a minus reversed-winding b
       let subOffset = c.offset + vec3(0, 6, 0)
-      ctx.fill2dMeshFlat(c.subMesh, color(1, 1, 0.4, 0.5), translate(subOffset))
+      ctx.fill2dMeshFlat(c.subMesh, color(1, 0.6, 0.2, 0.5), translate(subOffset))
       for wire in c.subWire:
         ctx.fill2dMeshFlat(wire, color(1, 1, 1, 0.5), translate(subOffset))
 

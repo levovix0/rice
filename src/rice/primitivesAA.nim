@@ -30,9 +30,8 @@ proc roundRect(pos, size: Vec2, radius: float32): float32 =
 
 proc fillRect*(
   ctx: DrawContext,
-  pos: Vec2,
-  size: Vec2,
-  color: Color,
+  pos: Vec2, size: Vec2,
+  color: Color = color(1, 1, 1),
   radius: float32 = 0,
   blend: bool = true,
   angle: float32 = 0,
@@ -74,9 +73,8 @@ proc drawRect*(ctx: DrawContext, pos: Vec2, size: Vec2, col: Vec4, radius: float
 
 proc drawRect*(
   ctx: DrawContext,
-  pos: Vec2,
-  size: Vec2,
-  color: Color,
+  pos: Vec2, size: Vec2,
+  color: Color = color(1, 1, 1),
   thickness: float32 = 0,
   radius: float32 = 0,
   blend: bool = true,
@@ -194,10 +192,8 @@ proc drawRectStroke*(ctx: DrawContext, pos: Vec2, size: Vec2, col: Vec4, radius:
 
 proc drawImage*(
   ctx: DrawContext,
-  pos: Vec2,
-  size: Vec2,
-  tex: GlUint,
-  color: Color,
+  pos: Vec2, size: Vec2, tex: GlUint,
+  color: Color = color(1, 1, 1),
   radius: float32 = 0,
   blend: bool = true,
   angle: float32 = 0,
@@ -253,13 +249,11 @@ proc drawImage*(
 
 proc drawIcon*(
   ctx: DrawContext,
-  pos: Vec2,
-  size: Vec2,
-  tex: GlUint,
-  color: Color,
-  radius: float32,
-  blend: bool,
-  angle: float32,
+  pos: Vec2, size: Vec2, tex: GlUint,
+  color: Color = color(1, 1, 1),
+  radius: float32 = 0,
+  blend: bool = true,
+  angle: float32 = 0,
 ) =
   # draw image (with solid color)
   let shader = ctx.makeShader:
@@ -302,10 +296,8 @@ proc drawIcon*(
 
 proc drawShadowRect*(
   ctx: DrawContext,
-  pos: Vec2,
-  size: Vec2,
-  color: Color,
-  blurRadius: float32,
+  pos: Vec2, size: Vec2, blurRadius: float32,
+  color: Color = color(1, 1, 1),
   radius: float32 = 0,
   angle: float32 = 0,
 ) =

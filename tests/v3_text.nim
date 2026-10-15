@@ -1,7 +1,6 @@
 import std/[math, unittest]
 import pkg/[siwin, chroma, bumpy]
-import pkg/pixie/fonts
-import pkg/pixie/paths {.all.} as pixiePaths
+import pkg/pixie/[fonts, fontloading, rendering/pathpoly]
 import rice
 import ./camera
 
@@ -85,7 +84,7 @@ test "font holes":
 
     # Stage 1: raw subpath contours
     var contours: seq[Polygon]
-    for shape in pixiePaths.commandsToShapes(path, true, pixelScale):
+    for shape in commandsToShapes(path, true, pixelScale):
       contours.add shape
     for j, contour in contours:
       var poly: Polygon
@@ -138,16 +137,10 @@ test "font holes":
       glClear(GL_COLOR_BUFFER_BIT)
 
       let (vw, vh) = (e.window.size.x.float32, e.window.size.y.float32)
-      ctx.viewport = combine(
-        translate(pos),
-        rot,
-        scale(vec3(zoom)),
-      )
-      ctx.projection = combine(
-        scale(2/vw, -2/vh, 1/1000)
-      )
+      ctx.viewport = translate(-pos) & rot & scale(zoom)
+      ctx.projection = scale(vh / vw, -1, 1/1000)
 
-      let textTransform = translate(vec3(-vw/2, -vh/2, 0))
+      let textTransform = translate(-vw/2, -vh/2, 0) & scale(2 / vh)
 
       case mode
       of Solid:
@@ -167,23 +160,23 @@ test "font holes":
             ctx.fill2dMeshFlat(p.mesh, palette[p.colorIdx mod palette.len], textTransform)
 
       ctx.drawText(
-        pos = ctx.viewportMatrix.inverse * vec3(0, vh/2 - 100, 0),
+        pos = ctx.viewportMatrix.inverse * vec3(0, (vh/2 - 100) * (2/vh), 0),
         arrangement = typeset(smallerFont, "mode: " & $mode),
         color = color(0.5, 0.5, 1, 1).vec4,
         origin = vec2(0.5, 0),
         axisYUp = false,
-        transform = ctx.viewportMatrix.mat3.mat4.inverse,
+        transform = ctx.viewportMatrix.mat3.mat4.inverse & scale(2 / vh),
       )
 
       ctx.drawText(
-        pos = ctx.viewportMatrix.inverse * vec3(0, vh/2 - 50, 0),
+        pos = ctx.viewportMatrix.inverse * vec3(0, (vh/2 - 50) * (2/vh), 0),
         arrangement = typeset(smallerFont, "press `space` to switch rendering mode"),
         color = color(0.5, 0.5, 0.5, 1).vec4,
         origin = vec2(0.5, 0),
         axisYUp = false,
-        transform = ctx.viewportMatrix.mat3.mat4.inverse,
+        transform = ctx.viewportMatrix.mat3.mat4.inverse & scale(2 / vh),
       )
 
-  addCameraMovement(win, pos, rot, zoom)
+  addCameraMovement(win, pos, rot, zoom, axisYUp = false)
 
   run win

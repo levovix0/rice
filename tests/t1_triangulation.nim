@@ -102,7 +102,7 @@ test "union of two triangles (t4 case)":
 test "empty and degenerate input":
   check triangulate([Polygon @[]]).len == 0
   check triangulate([Polygon @[vec2(0, 0), vec2(1, 0)]]).len == 0
-  check toTriangles(Polygon @[vec2(0, 0), vec2(1, 0), vec2(1, 1)]).len == 3
+  check triangulate(Polygon @[vec2(0, 0), vec2(1, 0), vec2(1, 1)]).len == 3
 
 test "disjoint triangles":
   let polys = [

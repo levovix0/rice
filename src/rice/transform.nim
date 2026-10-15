@@ -1,8 +1,11 @@
 import pkg/vmath
 
 
-proc combine*(a, b: Mat4): Mat4 =
-  b * a
+template combine*(a, b: Mat4): Mat4 =
+  {.line.}: b * a
+
+template `&`*(a, b: Mat4): Mat4 =
+  {.line.}: b * a
 
 proc combine*(matrices: varargs[Mat4]): Mat4 =
   if matrices.len == 0: return mat4()
@@ -12,8 +15,11 @@ proc combine*(matrices: varargs[Mat4]): Mat4 =
     result = matrices[i] * result
 
 
-proc combine*(a, b: Mat3): Mat3 =
-  b * a
+template combine*(a, b: Mat3): Mat3 =
+  {.line.}: b * a
+
+template `&`*(a, b: Mat3): Mat3 =
+  {.line.}: b * a
 
 proc combine*(matrices: varargs[Mat3]): Mat3 =
   if matrices.len == 0: return mat3()
@@ -45,7 +51,6 @@ proc rotateZ*(angle: float32, origin: Vec3): Mat4 =
   )
 
 
-# --- utils ---
 
 proc mat3*(m: Mat4): Mat3 =
   mat3(
@@ -70,6 +75,13 @@ proc vec3*(v: Vec2): Vec3 =
 
 
 
+proc scale*(mat: Mat4): Vec3 =
+  result.x = length(vec3(mat[0, 0], mat[0, 1], mat[0, 2]))
+  result.y = length(vec3(mat[1, 0], mat[1, 1], mat[1, 2]))
+  result.z = length(vec3(mat[2, 0], mat[2, 1], mat[2, 2]))
+
+
+
 proc rotate*(v: Vec2, angle_rad: float32): Vec2 =
   v * cos(angle_rad) + vec2(-v.y, v.x) * sin(angle_rad)
 
@@ -78,6 +90,9 @@ proc rotate*(v: Vec2, angle_rad: float32): Vec2 =
 proc translate*(x: float32 = 0, y: float32 = 0, z: float32 = 0): Mat4 =
   translate vec3(x, y, z)
 
-proc scale*(x: float32 = 1, y: float32 = 1, z: float32 = 1): Mat4 =
+proc scale*(k: float32): Mat4 =
+  scale vec3(k, k, k)
+
+proc scale*(x: float32, y: float32, z: float32 = 1): Mat4 =
   scale vec3(x, y, z)
 

@@ -74,9 +74,9 @@ proc capsuleShape(t: float32, a, b, dir, perp: Vec3, radius: float32): Vec4 =
 
 proc drawLine*(
   ctx: DrawContext,
-  color: Color,
-  a = vec3(0, 0, 0), b = vec3(1, 0, 0),
-  transform = mat4(),
+  a, b: Vec3,
+  color: Color = color(1, 1, 1),
+  transform: Mat4 = mat4(),
 ) =
   let transform = ctx.viewportToGlMatrix * transform
 
@@ -96,8 +96,9 @@ proc drawLine*(
 
 proc drawLine*(
   ctx: DrawContext,
-  color: Color, thickness: float32,
-  a = vec3(0, 0, 0), b = vec3(1, 0, 0),
+  a, b: Vec3,
+  thickness: float32,
+  color: Color = color(1, 1, 1),
   normal = vec3(0, 0, 1), transform = mat4(),
 ) =
   let transform = ctx.viewportToGlMatrix * transform
@@ -122,9 +123,9 @@ proc drawLine*(
 
 proc drawRect*(
   ctx: DrawContext,
-  color: Color,
-  size = vec2(1, 1),
-  center = vec3(0), normal = vec3(0, 0, 1), transform = mat4(),
+  center: Vec3, size: Vec2,
+  color = color(1, 1, 1),
+  normal = vec3(0, 0, 1), transform = mat4(),
 ) =
   let transform = ctx.viewportToGlMatrix * transform
   let plane = normal.toAngles.fromAngles
@@ -146,9 +147,10 @@ proc drawRect*(
 
 proc drawRect*(
   ctx: DrawContext,
-  color: Color, thickness: float32,
-  size = vec2(1, 1),
-  center = vec3(0), normal = vec3(0, 0, 1), transform = mat4(),
+  center: Vec3, size: Vec2,
+  thickness: float32,
+  color = color(1, 1, 1),
+  normal = vec3(0, 0, 1), transform = mat4(),
 ) =
   let transform = ctx.viewportToGlMatrix * transform
   let plane = normal.toAngles.fromAngles
@@ -170,9 +172,9 @@ proc drawRect*(
 
 proc fillRect*(
   ctx: DrawContext,
-  color: Color,
-  size = vec2(1, 1),
-  center = vec3(0), normal = vec3(0, 0, 1), transform = mat4(),
+  center: Vec3, size: Vec2,
+  color = color(1, 1, 1),
+  normal = vec3(0, 0, 1), transform = mat4(),
 ) =
   let transform = ctx.viewportToGlMatrix * transform
   let plane = normal.toAngles.fromAngles
@@ -197,9 +199,10 @@ proc fillRect*(
 
 proc drawRoundRect*(
   ctx: DrawContext,
-  color: Color,
-  size: Vec2, tl, tr, bl, br: float32,
-  center = vec3(0), normal = vec3(0, 0, 1), transform = mat4(),
+  center: Vec3, size: Vec2,
+  tl, tr, bl, br: float32,
+  color = color(1, 1, 1),
+  normal = vec3(0, 0, 1), transform = mat4(),
   pointCount: int = 64,
 ) =
   let transform = ctx.viewportToGlMatrix * transform
@@ -223,9 +226,11 @@ proc drawRoundRect*(
 
 proc drawRoundRect*(
   ctx: DrawContext,
-  color: Color, thickness: float32,
-  size: Vec2, tl, tr, bl, br: float32,
-  center = vec3(0), normal = vec3(0, 0, 1), transform = mat4(),
+  center: Vec3, size: Vec2,
+  tl, tr, bl, br: float32,
+  thickness: float32,
+  color = color(1, 1, 1),
+  normal = vec3(0, 0, 1), transform = mat4(),
   pointCount: int = 64,
 ) =
   let transform = ctx.viewportToGlMatrix * transform
@@ -250,9 +255,10 @@ proc drawRoundRect*(
 
 proc fillRoundRect*(
   ctx: DrawContext,
-  color: Color,
-  size: Vec2, tl, tr, bl, br: float32,
-  center = vec3(0), normal = vec3(0, 0, 1), transform = mat4(),
+  center: Vec3, size: Vec2,
+  tl, tr, bl, br: float32,
+  color = color(1, 1, 1),
+  normal = vec3(0, 0, 1), transform = mat4(),
   pointCount: int = 64,
 ) =
   let transform = ctx.viewportToGlMatrix * transform
@@ -279,9 +285,9 @@ proc fillRoundRect*(
 
 proc drawCircle*(
   ctx: DrawContext,
-  color: Color,
-  radius: float32 = 1,
-  center = vec3(0), normal = vec3(0, 0, 1), transform = mat4(),
+  center: Vec3, radius: float32,
+  color = color(1, 1, 1),
+  normal = vec3(0, 0, 1), transform = mat4(),
   pointCount: int = 32,
 ) =
   let transform = ctx.viewportToGlMatrix * transform
@@ -304,9 +310,10 @@ proc drawCircle*(
 
 proc drawCircle*(
   ctx: DrawContext,
-  color: Color, thickness: float32,
-  radius: float32 = 1,
-  center = vec3(0), normal = vec3(0, 0, 1), transform = mat4(),
+  center: Vec3, radius: float32,
+  thickness: float32,
+  color = color(1, 1, 1),
+  normal = vec3(0, 0, 1), transform = mat4(),
   pointCount: int = 32,
 ) =
   let transform = ctx.viewportToGlMatrix * transform
@@ -329,9 +336,9 @@ proc drawCircle*(
 
 proc fillCircle*(
   ctx: DrawContext,
-  color: Color,
-  radius: float32 = 1,
-  center = vec3(0), normal = vec3(0, 0, 1), transform = mat4(),
+  center: Vec3, radius: float32,
+  color = color(1, 1, 1),
+  normal = vec3(0, 0, 1), transform = mat4(),
   pointCount: int = 32,
 ) =
   let transform = ctx.viewportToGlMatrix * transform
@@ -358,9 +365,8 @@ proc fillCircle*(
 
 proc fillCapsule*(
   ctx: DrawContext,
-  color: Color,
-  a = vec3(0, 0, 0), b = vec3(1, 0, 0),
-  radius: float32 = 0.5,
+  a, b: Vec3, radius: float32,
+  color = color(1, 1, 1),
   normal = vec3(0, 0, 1), transform = mat4(),
   pointCount: int = 32,
 ) =
@@ -384,9 +390,8 @@ proc fillCapsule*(
 
 proc drawCapsule*(
   ctx: DrawContext,
-  color: Color,
-  a = vec3(0, 0, 0), b = vec3(1, 0, 0),
-  radius: float32 = 0.5,
+  a, b: Vec3, radius: float32,
+  color = color(1, 1, 1),
   normal = vec3(0, 0, 1), transform = mat4(),
   pointCount: int = 32,
 ) =
@@ -410,9 +415,9 @@ proc drawCapsule*(
 
 proc drawCapsule*(
   ctx: DrawContext,
-  color: Color, thickness: float32,
-  a = vec3(0, 0, 0), b = vec3(1, 0, 0),
-  radius: float32 = 0.5,
+  a, b: Vec3, radius: float32,
+  thickness: float32,
+  color = color(1, 1, 1),
   normal = vec3(0, 0, 1), transform = mat4(),
   pointCount: int = 32,
 ) =
@@ -441,34 +446,35 @@ proc fillRect*(ctx: DrawContext, rect: Rect, color: Color, transform: Mat4 = mat
 
 proc drawRoundRect*(
   ctx: DrawContext,
-  color: Color,
-  size: Vec2, radius: float32,
-  center = vec3(0), normal = vec3(0, 0, 1), transform = mat4(),
+  center: Vec3, size: Vec2, radius: float32,
+  color = color(1, 1, 1),
+  normal = vec3(0, 0, 1), transform = mat4(),
   pointCount: int = 32,
 ) =
   ctx.drawRoundRect(color=color, size=size, tl=radius, tr=radius, bl=radius, br=radius, center=center, normal=normal, transform=transform, pointCount=pointCount)
 
 proc drawRoundRect*(
   ctx: DrawContext,
-  color: Color, thickness: float32,
-  size: Vec2, radius: float32,
-  center = vec3(0), normal = vec3(0, 0, 1), transform = mat4(),
+  center: Vec3, size: Vec2, radius: float32,
+  thickness: float32,
+  color = color(1, 1, 1),
+  normal = vec3(0, 0, 1), transform = mat4(),
   pointCount: int = 32,
 ) =
   ctx.drawRoundRect(color=color, thickness=thickness, size=size, tl=radius, tr=radius, bl=radius, br=radius, center=center, normal=normal, transform=transform, pointCount=pointCount)
 
 proc fillRoundRect*(
   ctx: DrawContext,
-  color: Color,
-  size: Vec2, radius: float32,
-  center = vec3(0), normal = vec3(0, 0, 1), transform = mat4(),
+  center: Vec3, size: Vec2, radius: float32,
+  color = color(1, 1, 1),
+  normal = vec3(0, 0, 1), transform = mat4(),
   pointCount: int = 32,
 ) =
   ctx.fillRoundRect(color=color, size=size, tl=radius, tr=radius, bl=radius, br=radius, center=center, normal=normal, transform=transform, pointCount=pointCount)
 
 
-proc drawLine*(ctx: DrawContext, color: Color, a, b: Vec2, transform: Mat4 = mat4()) =
-  ctx.drawLine(color=color, a=vec3(a.x, a.y, 0), b=vec3(b.x, b.y, 0), transform=transform)
+proc drawLine*(ctx: DrawContext, a, b: Vec2, color: Color, transform: Mat4 = mat4()) =
+  ctx.drawLine(a=vec3(a.x, a.y, 0), b=vec3(b.x, b.y, 0), color=color, transform=transform)
 
 
 

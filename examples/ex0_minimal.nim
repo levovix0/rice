@@ -15,7 +15,7 @@ win.eventsHandler.onRender = proc(e: RenderEvent) =
   glClearColor(0.1, 0.1, 0.1, 1)
   glClear(GL_COLOR_BUFFER_BIT)
 
-  ctx.fillCircle(color(1, 1, 1), 0.5)
+  ctx.fillCircle(vec3(0), 0.5, color(1, 1, 1))
 
 
 run win

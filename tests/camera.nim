@@ -9,8 +9,8 @@ template addCameraMovement*(win: Window, pos: var Vec3, rot: var Mat4, zoom: var
   win.eventsHandler.onMouseMove = proc(e: MouseMoveEvent) =
     let d = e.window.mouse.pos - mpos
     let dn = d / vec2(
-      e.window.size.x.float32 * (e.window.size.y / e.window.size.x).float32,
-      (if axisYUp: 1 else: -1) * e.window.size.y.float32
+      -e.window.size.x.float32 * (e.window.size.y / e.window.size.x).float32,
+      (if axisYUp: -1 else: 1) * e.window.size.y.float32
     ) * 2
 
     if e.window.mouse.pressed == {MouseButton.right}:
@@ -28,7 +28,7 @@ template addCameraMovement*(win: Window, pos: var Vec3, rot: var Mat4, zoom: var
       )
     
     elif e.window.mouse.pressed == {MouseButton.middle}:
-      pos = pos - rot.inverse * vec3(dn.x, -dn.y, 0) / zoom
+      pos = pos - rot.inverse * vec3(-dn.x, dn.y, 0) / zoom
       
     mpos = e.window.mouse.pos
     redraw win
