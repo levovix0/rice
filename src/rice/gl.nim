@@ -1,13 +1,5 @@
 import std/[sets]
-import pkg/[vmath, opengl]
-import pkg/pixie/images as pixie
-import pkg/pixie/common
-
-when (compiles do: import pkg/imageman):
-  import pkg/imageman/[images as imagemanImages, colors as imagemanColors]
-  const hasImageman* = true
-else:
-  const hasImageman* = false
+import pkg/[vmath, opengl, pixie/common]
 
 export vmath, opengl
 
@@ -136,12 +128,8 @@ proc loadTexture*(obj: GlUint, size: IVec2, data: pointer) =
   glGenerateMipmap(GlTexture2d)
   glBindTexture(GlTexture2d, 0)
 
-proc loadTexture*(obj: GlUint, img: pixie.Image) =
+proc loadTexture*(obj: GlUint, img: Image) =
   obj.loadTexture(ivec2(img.width.int32, img.height.int32), img.data[0].addr)
-
-when hasImageman:
-  proc loadTexture*(obj: GlUint, img: imagemanImages.Image[imagemanColors.ColorRgbau]) =
-    obj.loadTexture(ivec2(img.width.int32, img.height.int32), img.data[0].addr)
 
 
 
@@ -406,7 +394,7 @@ proc `=destroy`(texture: TextureObj) =
   if texture.kind == Texture2d and freeTextures.len < rice_render_texturesToAllocateIfNoFree:
     freeTextures.incl texture.raw
     try:
-      texture.raw.loadTexture(pixie.newImage(1, 1))  # load empty image to force opengl use less memory
+      texture.raw.loadTexture(newImage(1, 1))  # load empty image to force opengl use less memory
     except GlError, PixieError:
       discard
   
@@ -440,18 +428,9 @@ proc newTexture*(kind: TextureKind = Texture2d): Texture =
     )
 
 
-proc load*(texture: Texture, image: pixie.Image) =
+proc load*(texture: Texture, image: Image) =
   texture.raw.loadTexture(image)
 
-proc newTexture*(image: pixie.Image): Texture =
+proc newTexture*(image: Image): Texture =
   result = newTexture()
   result.load(image)
-
-
-when hasImageman:
-  proc load*(texture: Texture, image: imagemanImages.Image[imagemanColors.ColorRgbau]) =
-    texture.raw.loadTexture(image)
-
-  proc newTexture*(image: imagemanImages.Image[imagemanColors.ColorRgbau]): Texture =
-    result = newTexture()
-    result.load(image)

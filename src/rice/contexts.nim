@@ -1,13 +1,9 @@
 import std/[tables, macros, sequtils, options, strutils, sets, unicode]
 import pkg/[shady, chroma, bumpy]
-import pkg/pixie/[images, fonts]
+import pkg/pixie/[common, fonts]
 import ./[transform, gl]
 
 export shady.gl_Position, shady.gl_VertexID
-
-
-when hasImageman:
-  import pkg/imageman/[images as imagemanImages, colors as imagemanColors]
 
 
 type  # for the ./rasterTexts module
