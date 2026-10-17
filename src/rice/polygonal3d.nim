@@ -1,4 +1,4 @@
-import pkg/[chroma, vmath, shady]
+import pkg/[chroma, vmath]
 import ./[gl, transform, contexts, contextutils]
 
 

@@ -1,5 +1,6 @@
 import pkg/siwin
 import rice
+import rice/shaders
 
 
 let win = newOpenglWindow(size = ivec2(600, 600), transparent = true)

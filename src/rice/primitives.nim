@@ -1,5 +1,5 @@
 import pkg/[bumpy, chroma, vmath]
-import ./[gl, transform, contexts]
+import ./[gl, contexts]
 
 
 ## this module defines functions to draw (stroke) and fill 2D
