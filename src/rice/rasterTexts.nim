@@ -1,5 +1,5 @@
 import std/[unicode, tables, math]
-import pkg/[chroma, shady, bumpy]
+import pkg/[chroma, bumpy]
 import pkg/pixie/[fonts, images, paints]
 import pkg/pixie/rendering/[fontpoly, fonts]
 import ./[gl, contexts]
@@ -96,23 +96,42 @@ proc glyphFamily(font: Font): GlyphFamily =
   )
 
 
+const
+  rasterTextVertSrc = """
+#version 300 es
+precision highp float;
+
+uniform vec4 transform;
+uniform vec4 placement;
+out vec2 uv;
+in vec2 ipos;
+
+void main() {
+  gl_Position = vec4(transform.xy + ipos * transform.zw, vec2(0.0, 1.0));
+  uv = placement.xy + ipos * placement.zw;
+}
+"""
+  rasterTextFragSrc = """
+#version 300 es
+precision highp float;
+
+uniform highp sampler2D gltex;
+
+in vec2 uv;
+uniform vec4 color;
+out vec4 glCol;
+
+void main() {
+  vec4 col = texture(gltex, uv);
+  glCol = vec4(color.rgb * color.a, color.a) * col.r;
+}
+"""
+
+
 proc startRasterTextDrawing*(ctx: DrawContext, font: Font): TextDrawContext =
-  let shader = ctx.makeShader:
-    proc vert(transform: Uniform[Vec4], placement: Uniform[Vec4]) =
-      var gl_Position {.outGl.}: Vec4
-      var uv {.out.}: Vec2
-      var ipos {.inp.}: Vec2
-      
-      gl_Position = vec4(transform.xy + ipos * transform.zw, vec2(0, 1))
-      uv = placement.xy + ipos * placement.zw
+  let shader = ctx.getShader(7001, rasterTextVertSrc, rasterTextFragSrc)
 
-    proc frag(color: Uniform[Vec4]) =
-      var glCol {.outGl.}: Vec4
-
-      let col = gltex.texture(uv)
-      glCol = vec4(color.rgb * color.a, color.a) * col.r
-
-  use shader.shader
+  use shader
 
   glEnable(GlBlend)
   glBlendFuncSeparate(GlOne, GlOneMinusSrcAlpha, GlOne, GlOne)
@@ -120,9 +139,9 @@ proc startRasterTextDrawing*(ctx: DrawContext, font: Font): TextDrawContext =
 
   TextDrawContext(
     family: ctx.glyphBuffer.families.mgetOrPut(font.glyphFamily, GlyphFamilyBuffer()).addr,
-    transform: shader.transform,
-    placement: shader.placement,
-    color: shader.color,
+    transform: OpenglUniform[Vec4](shader["transform"]),
+    placement: OpenglUniform[Vec4](shader["placement"]),
+    color: OpenglUniform[Vec4](shader["color"]),
     font: font,
   )
 

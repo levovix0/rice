@@ -1,5 +1,5 @@
 import std/[unicode, tables, math]
-import pkg/[shady, bumpy]
+import pkg/[bumpy]
 import pkg/pixie/[fonts]
 import pkg/pixie/rendering/[fontpoly]
 import ./[gl, contexts, paths]
@@ -21,26 +21,43 @@ proc glyphFamily(font: Font): GlyphMeshFamilyKey =
   GlyphMeshFamilyKey(typefaceId: cast[int](font.typeface))
 
 
+const
+  textVertSrc = """
+#version 300 es
+precision highp float;
+
+uniform mat4 transform;
+in vec2 ipos;
+
+void main() {
+  gl_Position = transform * vec4(ipos.xy, vec2(0.0, 1.0));
+}
+"""
+  textFragSrc = """
+#version 300 es
+precision highp float;
+
+uniform vec4 color;
+out vec4 glCol;
+
+void main() {
+  glCol = vec4(color.rgb * color.a, color.a);
+}
+"""
+
+
 proc startTextDrawing*(ctx: DrawContext, font: Font): TextDrawContext =
-  let shader = ctx.makeShader:
-    proc vert(transform: Uniform[Mat4]) =
-      var gl_Position {.outGl.}: Vec4
-      var ipos {.inp.}: Vec2
-      gl_Position = transform * vec4(ipos.xy, vec2(0, 1))
+  let shader = ctx.getShader(6001, textVertSrc, textFragSrc)
 
-    proc frag(color: Uniform[Vec4]) =
-      var glCol {.outGl.}: Vec4
-      glCol = vec4(color.rgb * color.a, color.a)
-
-  use shader.shader
+  use shader
 
   glEnable(GlBlend)
   glBlendFuncSeparate(GlOne, GlOneMinusSrcAlpha, GlOne, GlOne)
 
   TextDrawContext(
     meshFamily: ctx.glyphMeshes.mgetOrPut(font.glyphFamily, GlyphMeshBuffer()).addr,
-    transform: shader.transform,
-    color: shader.color,
+    transform: OpenglUniform[Mat4](shader["transform"]),
+    color: OpenglUniform[Vec4](shader["color"]),
     font: font,
   )
 

@@ -7,6 +7,31 @@ import ./[gl, contexts]
 export WindingRule
 
 
+const
+  flat2dVertSrc = """
+#version 300 es
+precision highp float;
+
+in vec2 ipos;
+uniform mat4 u_transform;
+
+void main() {
+  gl_Position = u_transform * vec4(ipos.xy, vec2(0.0, 1.0));
+}
+"""
+  flat2dFragSrc = """
+#version 300 es
+precision highp float;
+
+out vec4 glCol;
+uniform vec4 u_color;
+
+void main() {
+  glCol = u_color;
+}
+"""
+
+
 type
   ScanEdge = object
     a, b: Vec2      # a.y < b.y always
@@ -227,18 +252,11 @@ proc fill2dMeshFlat*(
 ) =
   let transform = ctx.viewportToGlMatrix * transform
 
-  let shader = ctx.makeShader:
-    proc vert =
-      var ipos {.inp.}: Vec2
+  let shader = ctx.getShader(3001, flat2dVertSrc, flat2dFragSrc)
 
-      gl_Position = @(transform) * vec4(ipos.xy, vec2(0, 1))
-
-    proc frag =
-      var glCol {.outGl.}: Vec4
-
-      glCol = @(color.vec4)
-
-  useAndPassUniforms shader
+  shader.use()
+  shader["u_transform"].uniform = transform
+  shader["u_color"].uniform = color.vec4
   draw mesh
 
 

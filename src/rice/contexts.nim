@@ -87,6 +87,11 @@ type
     cpuCallback*: Signature
     glslCode*: string
   
+  GlShaderBox* = ref object of RootObj
+    ## wraps Shader, so it can be stored in DrawContext.shaders
+    shader*: Shader
+  
+
 
   ShaderKind = enum
     vert
@@ -744,6 +749,14 @@ proc floor*(v: Vec2): Vec2 =
   vec2(floor(v.x), floor(v.y))
 
 
+proc getShader*(ctx: DrawContext, id: int, vert, frag: string): Shader =
+  ## returns shader, compiling it from glsl sources if not compiled yet;
+  ## id must be unique for each pair of shader sources in the whole program
+  if id notin ctx.shaders:
+    ctx.shaders[id] = GlShaderBox(shader: newShader({GlVertexShader: vert, GlFragmentShader: frag}))
+  GlShaderBox(ctx.shaders[id]).shader
+
+
 proc passTransform*(ctx: DrawContext, shader: tuple|object|ref object, pos = vec2(), size = vec2(10, 10), angle: float32 = 0, flipY = false) =
   shader.transform.uniform =
     translate(vec3(ctx.px*(vec2(pos.x, -pos.y) - ctx.wh - (if flipY: vec2(0, size.y) else: vec2())), 0)) *
@@ -751,6 +764,14 @@ proc passTransform*(ctx: DrawContext, shader: tuple|object|ref object, pos = vec
     rotate(angle, vec3(0, 0, 1))
   shader.size.uniform = size
   shader.px.uniform = ctx.px
+
+proc passTransform*(ctx: DrawContext, shader: Shader, pos = vec2(), size = vec2(10, 10), angle: float32 = 0, flipY = false) =
+  shader["transform"].uniform =
+    translate(vec3(ctx.px*(vec2(pos.x, -pos.y) - ctx.wh - (if flipY: vec2(0, size.y) else: vec2())), 0)) *
+    scale(if flipY: vec3(1, -1, 1) else: vec3(1, 1, 1)) *
+    rotate(angle, vec3(0, 0, 1))
+  shader["size"].uniform = size
+  shader["px"].uniform = ctx.px
 
 
 var gltex*: Uniform[Sampler2d]  # workaround shady#9
