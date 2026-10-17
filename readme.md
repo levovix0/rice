@@ -242,7 +242,7 @@ run win
 
 ```nim
 import pkg/siwin
-import rice
+import rice, rice/shaders
 
 let win = newOpenglWindow()
 opengl.loadExtensions()
@@ -510,6 +510,8 @@ ctx.free(fb)  # return to pool for reuse
 
 ## Custom shaders
 
+Custom shaders module depends on [shady](https://github.com/treeform/shady), and is optional. `import rice/shaders` to use them
+
 Shaders are written as Nim procs and transpiled to GLSL via [shady](https://github.com/treeform/shady). The `makeShader` macro compiles each shader once per call site and caches it in `ctx.shaders`.
 
 ```nim
@@ -670,13 +672,6 @@ const rice_render_texturesToAllocateIfNoFree {.intdefine.} = 8
 ```
 Number of textures to pre-allocate in the texture pool when none are free.
 
-
-# Notes
-
-Rice is a work in progress. API is very unstable.
-
-- Shady transpiles Nim procs to GLSL at compile time. This makes compilation slower than when using GLSL strings. Nim's IC would help significantly.
-- pixie (required for path triangulation and font loading) brings roughly 300 MB of transitive dependencies if installed via `atlas`.
 
 ## Why OpenGL?
 
